@@ -659,9 +659,11 @@ class CustomRelic extends Relic {
   };
 
   factory CustomRelic.fromJson(Map<String, dynamic> json) => CustomRelic(
-    id: json['id'], title: json['title'], description: json['description'],
+    id: json['id'],
+    title: json['title'],
+    description: json['description'],
     requirement: json['requirement'],
-    icon: IconData(json['icon'], fontFamily: 'MaterialIcons'),
+    icon: Icons.workspace_premium,
     color: Color(json['color']),
     targetExercise: json['targetEx'],
     targetWeight: (json['targetW'] as num).toDouble(),
