@@ -48,7 +48,7 @@ A dedicated persistence layer that scans your training history to verify and "ex
 
 1.  **Clone the Archive:**
     ```bash
-    git clone https://github.com/YOUR_USERNAME/titan-log-pro.git
+    git clone https://github.com/NeTRuNNeRGLiTCH/Spartan-space.git
     ```
 2.  **Sync Dependencies:**
     ```bash
