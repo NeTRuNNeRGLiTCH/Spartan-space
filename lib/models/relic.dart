@@ -21,10 +21,8 @@ class Relic {
     required this.isUnlocked,
   });
 
-  // --- INTERNAL UTILITIES ---
   static double _val(dynamic v) => (v is num) ? v.toDouble() : 0.0;
 
-  // --- THE MASTER KEY LOGIC ---
   static bool checkPerfection(Map<String, dynamic> data) {
     double wrist = _val(data['wrist']);
     double knee = _val(data['knee']);
@@ -365,7 +363,7 @@ class Relic {
       title: 'QUAD-DRIVE ACTIVE',
       description: 'Lower chassis volume has bypassed standard athletic baselines.',
       requirement: 'THIGHS > 65CM',
-      icon: Icons.whatshot, // FIXED ICON
+      icon: Icons.whatshot,
       color: Colors.redAccent,
       isUnlocked: (logs, data) => _val(data['thighL']) >= 65 || _val(data['thighR']) >= 65,
     ),
@@ -531,7 +529,7 @@ class Relic {
       icon: Icons.science,
       color: Colors.lightBlueAccent,
       isUnlocked: (logs, data) {
-        return logs.length > 30; // Proxy for having enough data to deload
+        return logs.length > 30;
       },
     ),
     Relic(
@@ -612,7 +610,7 @@ class Relic {
       requirement: 'L/R STRENGTH DEVIATION < 5%',
       icon: Icons.sync_alt,
       color: Colors.cyan,
-      isUnlocked: (logs, data) => logs.length > 5, // Logic would require L/R labeling in future
+      isUnlocked: (logs, data) => logs.length > 5,
     ),
     Relic(
       id: 'immortal_status',

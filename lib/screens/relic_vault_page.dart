@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import '../models/relic.dart';
 import '../models/workout_log.dart';
+import '../services/objectbox_service.dart';
 import '../widgets/relic_widgets.dart';
 
 class RelicVaultPage extends StatefulWidget {
   final List<WorkoutLog> logs;
   final Map<String, dynamic> bodyData;
   final List<CustomRelic> customRelics;
+  final ObjectBoxService service;
   final VoidCallback onUpdate;
 
   const RelicVaultPage({
@@ -14,6 +16,7 @@ class RelicVaultPage extends StatefulWidget {
     required this.logs,
     required this.bodyData,
     required this.customRelics,
+    required this.service,
     required this.onUpdate,
   });
 

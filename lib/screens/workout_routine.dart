@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../models/workout_node.dart';
 import '../models/workout_log.dart';
 import '../models/goal_node.dart';
+import '../models/custom_protocol.dart';
+import '../services/objectbox_service.dart';
 import '../widgets/workout_widgets.dart';
 import 'session_complete_page.dart';
 
@@ -10,8 +12,8 @@ class WorkoutRoutine extends StatefulWidget {
   final GoalNode? roadmap;
   final WorkoutNode? selectedDay;
   final List<WorkoutLog> logs;
+  final ObjectBoxService service;
   final VoidCallback onUpdate;
-  final Function(WorkoutLog)? onLog;
 
   const WorkoutRoutine({
     super.key,
@@ -19,8 +21,8 @@ class WorkoutRoutine extends StatefulWidget {
     this.roadmap,
     this.selectedDay,
     required this.logs,
+    required this.service,
     required this.onUpdate,
-    this.onLog,
   });
 
   @override
@@ -50,7 +52,7 @@ class _WorkoutRoutineState extends State<WorkoutRoutine> {
     if (node.type == NodeType.leaf) {
       list.add(node);
     } else {
-      for (var child in node.children) {
+      for (var child in node.children.toList()) {
         _flatten(child, list);
       }
     }
@@ -64,9 +66,8 @@ class _WorkoutRoutineState extends State<WorkoutRoutine> {
           title: widget.selectedDay?.title ?? widget.plan.title,
           dailyObjective: _objectiveController.text,
           exercises: exercises,
-          logs: widget.logs,
+          service: widget.service,
           onUpdate: widget.onUpdate,
-          onLog: widget.onLog,
           roadmap: widget.roadmap,
           rootSetRest: widget.plan.restTime ?? 90,
           rootInterRest: widget.plan.interExerciseRest,
@@ -116,16 +117,17 @@ class _WorkoutRoutineState extends State<WorkoutRoutine> {
               itemCount: exercises.length,
               itemBuilder: (context, index) {
                 var ex = exercises[index];
+
+                String unit = "R";
+                if (ex.trackingType == TrackingType.time) unit = "SEC";
+                if (ex.trackingType == TrackingType.distance) unit = "METERS";
+
                 return RoutineExerciseCard(
                   title: ex.title,
                   muscle: ex.muscleGroup ?? "GEN",
                   isRoadmap: widget.roadmap != null,
                   onManageLogic: () => _showProtocolManager(ex),
-                  setRows: ex.sets.asMap().entries.map((entry) {
-                    String unit = "R";
-                    if (ex.trackingType == TrackingType.time) unit = "SEC";
-                    if (ex.trackingType == TrackingType.distance) unit = "M";
-
+                  setRows: ex.sets.toList().asMap().entries.map((entry) {
                     return Padding(
                       padding: const EdgeInsets.symmetric(vertical: 8),
                       child: Row(
@@ -134,11 +136,11 @@ class _WorkoutRoutineState extends State<WorkoutRoutine> {
                           const SizedBox(width: 15),
                           const Text("TARGET", style: TextStyle(color: Colors.white38, fontSize: 8, fontWeight: FontWeight.w900)),
                           const Spacer(),
-                          _inlineEdit(entry.value.value.toString(), unit,
+                          _inlineEdit("${entry.value.value}", unit,
                                   (v) => setState(() => entry.value.value = int.tryParse(v) ?? 0)),
                           const SizedBox(width: 10),
                           if (ex.trackingType == TrackingType.weightReps)
-                            _inlineEdit(entry.value.weight.toString(), "KG",
+                            _inlineEdit("${entry.value.weight}", "KG",
                                     (v) => setState(() => entry.value.weight = double.tryParse(v) ?? 0)),
                         ],
                       ),
@@ -197,71 +199,61 @@ class _WorkoutRoutineState extends State<WorkoutRoutine> {
   }
 
   void _showProtocolManager(WorkoutNode ex) {
+    List<CustomProtocol> available = widget.service.getAllProtocols();
+    CustomProtocol? current = ex.protocol.target;
+
     showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF121212),
-      isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(30))),
       builder: (ctx) => StatefulBuilder(
         builder: (context, setSheetState) => Padding(
-          padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom, left: 25, right: 25, top: 25),
+          padding: const EdgeInsets.all(30),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               const Text("AUTOMATION STACK", style: TextStyle(color: Colors.orangeAccent, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 15),
-              ...ex.protocols.asMap().entries.map((e) => ListTile(
-                title: Text(e.value.type.name.toUpperCase(), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white70)),
-                trailing: IconButton(icon: const Icon(Icons.close, size: 16, color: Colors.redAccent), onPressed: () => setSheetState(() => ex.protocols.removeAt(e.key))),
-              )),
               const SizedBox(height: 20),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    _addBtn(ex, ProtocolType.pyramidOverload, "Pyramid", setSheetState),
-                    _addBtn(ex, ProtocolType.repRecovery, "Recovery", setSheetState),
-                    _addBtn(ex, ProtocolType.plateauBreaker, "Plateau", setSheetState),
-                    _addBtn(ex, ProtocolType.volumeKing, "Vol. King", setSheetState),
-                  ],
-                ),
+              DropdownButton<CustomProtocol>(
+                value: available.any((p) => p.id == current?.id)
+                    ? available.firstWhere((p) => p.id == current?.id)
+                    : null,
+                isExpanded: true,
+                hint: const Text("Select TitanScript", style: TextStyle(color: Colors.white24)),
+                dropdownColor: const Color(0xFF0A0A0A),
+                items: available.map((p) => DropdownMenuItem(
+                    value: p,
+                    child: Text(p.title, style: const TextStyle(color: Colors.cyanAccent, fontSize: 13))
+                )).toList(),
+                onChanged: (val) {
+                  setSheetState(() => current = val);
+                },
               ),
-              const SizedBox(height: 40),
+              const SizedBox(height: 30),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.orangeAccent, minimumSize: const Size(double.infinity, 50)),
+                onPressed: () {
+                  ex.protocol.target = current;
+                  widget.service.savePlan(ex);
+                  Navigator.pop(ctx);
+                  setState(() {});
+                },
+                child: const Text("ATTACH SCRIPT", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+              ),
+              const SizedBox(height: 10),
+              TextButton(
+                onPressed: () {
+                  ex.protocol.target = null;
+                  widget.service.savePlan(ex);
+                  Navigator.pop(ctx);
+                  setState(() {});
+                },
+                child: const Text("CLEAR LOGIC", style: TextStyle(color: Colors.redAccent, fontSize: 10)),
+              )
             ],
           ),
         ),
       ),
-    ).then((_) => setState(() {}));
-  }
-
-  Widget _addBtn(WorkoutNode ex, ProtocolType type, String label, StateSetter setSheetState) {
-    return Padding(
-      padding: const EdgeInsets.all(4.0),
-      child: ActionChip(
-          backgroundColor: Colors.white.withOpacity(0.05),
-          label: Text(label, style: const TextStyle(fontSize: 10, color: Colors.white)),
-          onPressed: () => _configProtocol(ex, type, label, () => setSheetState(() {}))),
     );
-  }
-
-  void _configProtocol(WorkoutNode ex, ProtocolType type, String label, VoidCallback onAdded) {
-    TextEditingController c1 = TextEditingController(text: "12");
-    TextEditingController c2 = TextEditingController(text: "5");
-    showDialog(context: context, builder: (ctx) => AlertDialog(
-      backgroundColor: const Color(0xFF1A1A1A),
-      title: Text("Configure $label", style: const TextStyle(color: Colors.white, fontSize: 16)),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (type != ProtocolType.plateauBreaker)
-            TextField(controller: c1, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: "Target Value", labelStyle: TextStyle(color: Colors.white38))),
-          TextField(controller: c2, style: const TextStyle(color: Colors.white), decoration: InputDecoration(labelText: type == ProtocolType.repRecovery ? "Step Value" : "Weight Delta", labelStyle: const TextStyle(color: Colors.white38))),
-        ],
-      ),
-      actions: [TextButton(onPressed: () {
-        ex.protocols.add(WorkoutProtocol(type: type, targetValue: int.tryParse(c1.text) ?? 12, weightValue: double.tryParse(c2.text) ?? 5.0, stepValue: int.tryParse(c2.text) ?? 5));
-        onAdded(); Navigator.pop(ctx);
-      }, child: const Text("SAVE", style: TextStyle(color: Colors.orangeAccent)))],
-    ));
   }
 }

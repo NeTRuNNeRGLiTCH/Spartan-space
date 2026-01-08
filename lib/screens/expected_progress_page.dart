@@ -1,17 +1,20 @@
 import 'package:flutter/material.dart';
 import '../models/goal_node.dart';
 import '../models/workout_node.dart';
+import '../services/objectbox_service.dart';
 import '../widgets/expected_widgets.dart';
 
 class ExpectedProgressPage extends StatefulWidget {
   final List<GoalNode> goals;
   final List<WorkoutNode> plans;
+  final ObjectBoxService service;
   final VoidCallback onUpdate;
 
   const ExpectedProgressPage({
     super.key,
     required this.goals,
     required this.plans,
+    required this.service,
     required this.onUpdate,
   });
 
@@ -69,14 +72,15 @@ class _ExpectedProgressPageState extends State<ExpectedProgressPage> {
         onEdit: () => _showEditExerciseGoal(node),
       );
     } else {
+      final childrenList = node.children.toList();
       return GoalFolderTile(
         title: node.title,
         current: node.completedSessions,
         total: node.totalSessions,
         onManage: () => _showParentManager(node, parentList),
-        children: node.children.isEmpty
+        children: childrenList.isEmpty
             ? [const Center(child: Text("No linked exercises", style: TextStyle(color: Colors.white10, fontSize: 11)))]
-            : node.children.map((child) => _buildRecursiveGoal(child, node.children)).toList(),
+            : childrenList.map((child) => _buildRecursiveGoal(child, childrenList)).toList(),
       );
     }
   }
@@ -85,7 +89,7 @@ class _ExpectedProgressPageState extends State<ExpectedProgressPage> {
     if (widget.plans.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         backgroundColor: Colors.redAccent,
-        content: Text("No Plans Found. Create a Blueprint in 'PLAN' first."),
+        content: Text("No Blueprints Found. Create one in 'PLAN' first."),
       ));
       return;
     }
@@ -120,6 +124,7 @@ class _ExpectedProgressPageState extends State<ExpectedProgressPage> {
       ),
     );
   }
+
   void _setupRoadmapDetails(WorkoutNode source) {
     TextEditingController sessionCtrl = TextEditingController(text: "10");
 
@@ -140,13 +145,16 @@ class _ExpectedProgressPageState extends State<ExpectedProgressPage> {
             style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
             onPressed: () {
               int totalS = int.tryParse(sessionCtrl.text) ?? 10;
+
               GoalNode newRoadmap = GoalNode(
                 title: source.title,
-                type: GoalNodeType.folder,
+                typeIndex: GoalNodeType.folder.index,
                 totalSessions: totalS,
               );
+
               _cloneStructure(source, newRoadmap);
-              setState(() => widget.goals.add(newRoadmap));
+
+              widget.service.saveGoal(newRoadmap);
               widget.onUpdate();
               Navigator.pop(ctx);
             },
@@ -158,23 +166,26 @@ class _ExpectedProgressPageState extends State<ExpectedProgressPage> {
   }
 
   void _cloneStructure(WorkoutNode source, GoalNode target) {
-    for (var child in source.children) {
+    for (var child in source.children.toList()) {
       if (child.type == NodeType.leaf) {
-        double startWeight = child.sets.isNotEmpty ? child.sets.first.weight : 0;
+        final sets = child.sets.toList();
+        double startWeight = sets.isNotEmpty ? sets.first.weight : 0;
+
         target.children.add(GoalNode(
           title: child.title,
-          type: GoalNodeType.exercise,
+          typeIndex: GoalNodeType.exercise.index,
           currentWeight: startWeight,
           targetWeight: startWeight + 10,
           weightStep: 5.0,
         ));
       } else {
-        GoalNode sub = GoalNode(title: child.title, type: GoalNodeType.folder);
+        GoalNode sub = GoalNode(title: child.title, typeIndex: GoalNodeType.folder.index);
         target.children.add(sub);
         _cloneStructure(child, sub);
       }
     }
   }
+
   void _showParentManager(GoalNode node, List<GoalNode> parentList) {
     showModalBottomSheet(
       context: context,
@@ -185,19 +196,32 @@ class _ExpectedProgressPageState extends State<ExpectedProgressPage> {
           leading: const Icon(Icons.fast_forward, color: Colors.greenAccent),
           title: const Text("Manually Advance Session"),
           onTap: () {
-            setState(() { if (node.completedSessions < node.totalSessions) node.completedSessions++; });
-            widget.onUpdate(); Navigator.pop(ctx);
+            if (node.completedSessions < node.totalSessions) {
+              node.completedSessions++;
+              widget.service.saveGoal(node);
+              widget.onUpdate();
+            }
+            Navigator.pop(ctx);
           },
         ),
         ListTile(
           leading: const Icon(Icons.settings_backup_restore, color: Colors.white38),
           title: const Text("Reset Roadmap Progress"),
-          onTap: () { setState(() => node.completedSessions = 0); widget.onUpdate(); Navigator.pop(ctx); },
+          onTap: () {
+            node.completedSessions = 0;
+            widget.service.saveGoal(node);
+            widget.onUpdate();
+            Navigator.pop(ctx);
+          },
         ),
         ListTile(
           leading: const Icon(Icons.delete_sweep, color: Colors.redAccent),
           title: const Text("Delete Roadmap"),
-          onTap: () { setState(() => parentList.remove(node)); widget.onUpdate(); Navigator.pop(ctx); },
+          onTap: () {
+            widget.service.goalBox.remove(node.id);
+            widget.onUpdate();
+            Navigator.pop(ctx);
+          },
         ),
       ]),
     );
@@ -227,12 +251,13 @@ class _ExpectedProgressPageState extends State<ExpectedProgressPage> {
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("CANCEL")),
           TextButton(
             onPressed: () {
-              setState(() {
-                node.currentWeight = double.tryParse(c1.text) ?? 0;
-                node.targetWeight = double.tryParse(c2.text) ?? 0;
-                node.weightStep = double.tryParse(c3.text) ?? 2.5;
-              });
-              widget.onUpdate(); Navigator.pop(ctx);
+              node.currentWeight = double.tryParse(c1.text) ?? 0;
+              node.targetWeight = double.tryParse(c2.text) ?? 0;
+              node.weightStep = double.tryParse(c3.text) ?? 2.5;
+
+              widget.service.saveGoal(node);
+              widget.onUpdate();
+              Navigator.pop(ctx);
             },
             child: const Text("SAVE", style: TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold)),
           ),

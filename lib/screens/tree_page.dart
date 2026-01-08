@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../models/workout_node.dart';
 import '../models/workout_log.dart';
 import '../models/goal_node.dart';
+import '../models/custom_protocol.dart';
+import '../services/objectbox_service.dart';
 import '../widgets/planner_widgets.dart';
 import 'workout_routine.dart';
 
@@ -10,6 +12,7 @@ class TreePage extends StatefulWidget {
   final List<WorkoutLog> logs;
   final List<GoalNode> goals;
   final Map<String, List<LibraryExercise>> library;
+  final ObjectBoxService service;
   final VoidCallback onUpdate;
 
   const TreePage({
@@ -18,6 +21,7 @@ class TreePage extends StatefulWidget {
     required this.logs,
     required this.goals,
     required this.library,
+    required this.service,
     required this.onUpdate,
   });
 
@@ -36,19 +40,10 @@ class _TreePageState extends State<TreePage> {
   }
 
   @override
-  void dispose() {
-    _pageController.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     if (widget.plans.isNotEmpty) {
       _currentIndex = _currentIndex.clamp(0, widget.plans.length - 1);
-    } else {
-      _currentIndex = 0;
     }
-
     return Scaffold(
       backgroundColor: const Color(0xFF050505),
       appBar: AppBar(
@@ -56,15 +51,13 @@ class _TreePageState extends State<TreePage> {
             style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 2, fontSize: 16, color: Colors.white)),
         centerTitle: true,
         backgroundColor: Colors.transparent,
-        elevation: 0,
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Padding(
-            padding: EdgeInsets.only(left: 30, top: 10, bottom: 5),
-            child: Text("LAUNCH SESSION",
-                style: TextStyle(color: Colors.white54, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 2)),
+            padding: EdgeInsets.only(left: 30, top: 10),
+            child: Text("LAUNCH SESSION", style: TextStyle(color: Colors.white54, fontSize: 10, letterSpacing: 2)),
           ),
           SizedBox(
             height: 200,
@@ -77,82 +70,14 @@ class _TreePageState extends State<TreePage> {
               itemBuilder: (context, index) => _buildBlueprintCarouselCard(index),
             ),
           ),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 30, vertical: 15),
-            child: Divider(color: Colors.white24),
-          ),
-          const Padding(
-            padding: EdgeInsets.only(left: 30, bottom: 15),
-            child: Text("MANAGE MODULE STRUCTURE",
-                style: TextStyle(color: Colors.orangeAccent, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 2)),
-          ),
-          Expanded(
-            child: widget.plans.isEmpty
-                ? const Center(child: Text("Create a Blueprint to start.", style: TextStyle(color: Colors.white38)))
-                : _buildRecursiveEditor(),
-          ),
+          const Divider(color: Colors.white24, indent: 30, endIndent: 30),
+          Expanded(child: widget.plans.isEmpty ? const SizedBox() : _buildRecursiveEditor()),
         ],
       ),
       floatingActionButton: FloatingActionButton(
         backgroundColor: Colors.orangeAccent,
         child: const Icon(Icons.add, color: Colors.black),
         onPressed: () => _showAddRootDialog(),
-      ),
-    );
-  }
-
-  void _handleModuleLaunch(WorkoutNode plan) {
-    GoalNode? attachedRoadmap;
-    try {
-      attachedRoadmap = widget.goals.firstWhere((g) => g.title == plan.title);
-    } catch (e) {
-      attachedRoadmap = null;
-    }
-    List<WorkoutNode> days = plan.children.where((c) => c.type == NodeType.parent).toList();
-    if (days.isEmpty) {
-      _launch(plan, attachedRoadmap, null);
-    } else {
-      showModalBottomSheet(
-        context: context,
-        backgroundColor: const Color(0xFF111111),
-        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(25))),
-        builder: (ctx) => Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Padding(
-              padding: EdgeInsets.all(20.0),
-              child: Text("WHICH SESSION TODAY?", style: TextStyle(color: Colors.orangeAccent, fontWeight: FontWeight.bold, letterSpacing: 1)),
-            ),
-            ...days.map((day) => ListTile(
-              leading: const Icon(Icons.calendar_today_rounded, color: Colors.white54, size: 18),
-              title: Text(day.title, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-              onTap: () {
-                Navigator.pop(ctx);
-                _launch(plan, attachedRoadmap, day);
-              },
-            )).toList(),
-            const SizedBox(height: 20),
-          ],
-        ),
-      );
-    }
-  }
-
-  void _launch(WorkoutNode plan, GoalNode? roadmap, WorkoutNode? selectedDay) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => WorkoutRoutine(
-          plan: plan,
-          roadmap: roadmap,
-          selectedDay: selectedDay,
-          logs: widget.logs,
-          onUpdate: widget.onUpdate,
-          onLog: (newLog) {
-            setState(() => widget.logs.insert(0, newLog));
-            widget.onUpdate();
-          },
-        ),
       ),
     );
   }
@@ -165,157 +90,178 @@ class _TreePageState extends State<TreePage> {
       isSelected: isSelected,
       isPressing: false,
       onTap: () => _handleModuleLaunch(plan),
-      onSettings: () => _showFolderManager(plan, widget.plans),
+      onSettings: () => _showFolderManager(plan, null),
     );
+  }
+
+  void _handleModuleLaunch(WorkoutNode plan) {
+    GoalNode? attachedRoadmap;
+    try {
+      attachedRoadmap = widget.goals.firstWhere((g) => g.title == plan.title);
+    } catch (e) { attachedRoadmap = null; }
+
+    List<WorkoutNode> days = plan.children.where((c) => c.type == NodeType.parent).toList();
+    Navigator.push(context, MaterialPageRoute(builder: (context) => WorkoutRoutine(
+      plan: plan, roadmap: attachedRoadmap, selectedDay: days.isEmpty ? null : days.first,
+      logs: widget.logs, service: widget.service, onUpdate: widget.onUpdate,
+    )));
   }
 
   Widget _buildRecursiveEditor() {
     var activePlan = widget.plans[_currentIndex];
+    final childrenList = activePlan.children.toList();
     return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 20),
-      itemCount: activePlan.children.length,
-      itemBuilder: (context, index) {
-        return _buildNode(activePlan.children[index], activePlan.children);
-      },
+      itemCount: childrenList.length,
+      itemBuilder: (context, index) => _buildNode(childrenList[index], activePlan),
     );
   }
 
-  Widget _buildNode(WorkoutNode node, List<WorkoutNode> parentList) {
+  Widget _buildNode(WorkoutNode node, WorkoutNode parent) {
     if (node.type == NodeType.leaf) {
-      int displayRest = node.restTime ?? widget.plans[_currentIndex].restTime ?? 90;
       return PlannerExerciseTile(
         title: node.title,
-        subtitle: "${node.sets.length} sets • ${displayRest}s Recovery • ${node.muscleGroup ?? 'GEN'}",
-        onEdit: () => _showLeafSettings(node, parentList),
+        subtitle: "${node.sets.length} sets • ${node.protocol.target?.title ?? 'NO SCRIPT'}",
+        onEdit: () => _showLeafSettings(node, parent),
       );
     } else {
+      final subChildren = node.children.toList();
       return PlannerFolderTile(
         title: node.title,
-        onManage: () => _showFolderManager(node, parentList),
-        children: node.children.isEmpty
+        onManage: () => _showFolderManager(node, parent),
+        children: subChildren.isEmpty
             ? [const Text("Empty", style: TextStyle(color: Colors.white38, fontSize: 11))]
-            : node.children.map((child) => _buildNode(child, node.children)).toList(),
+            : subChildren.map((child) => _buildNode(child, node)).toList(),
       );
     }
   }
 
-  void _showAddDialog(List<WorkoutNode> targetList) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF111111),
-      builder: (ctx) => Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          ListTile(
-            leading: const Icon(Icons.create_new_folder, color: Colors.blueAccent),
-            title: const Text("NEW SUB-MODULE", style: TextStyle(color: Colors.white)),
-            onTap: () { Navigator.pop(ctx); _showFolderNameDialog(targetList); },
-          ),
-          ListTile(
-            leading: const Icon(Icons.fitness_center, color: Colors.orangeAccent),
-            title: const Text("CHOOSE EXERCISE", style: TextStyle(color: Colors.white)),
-            onTap: () { Navigator.pop(ctx); _showLibraryPicker(targetList); },
-          ),
-          const SizedBox(height: 20),
-        ],
-      ),
-    );
-  }
+  void _showRenameDialog(WorkoutNode node, WorkoutNode? parent) {
+    TextEditingController titleCtrl = TextEditingController(text: node.title);
+    TextEditingController setRestCtrl = TextEditingController(text: (node.restTime ?? 90).toString());
+    TextEditingController interRestCtrl = TextEditingController(text: node.interExerciseRest.toString());
 
-  void _showLibraryPicker(List<WorkoutNode> targetList) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF111111),
-      isScrollControlled: true,
-      builder: (ctx) => DraggableScrollableSheet(
-        initialChildSize: 0.7,
-        expand: false,
-        builder: (context, scrollController) => ListView(
-          controller: scrollController,
-          children: widget.library.keys.map((muscle) => ExpansionTile(
-            title: Text(muscle.toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white)),
-            children: widget.library[muscle]!.map((libEx) => ListTile(
-              title: Text(libEx.name, style: const TextStyle(color: Colors.white)),
-              subtitle: Text(libEx.trackingType.name.toUpperCase(), style: const TextStyle(fontSize: 9, color: Colors.white54)),
-              onTap: () {
-                Navigator.pop(ctx);
-                WorkoutNode newNode = WorkoutNode(
-                    title: libEx.name,
-                    type: NodeType.leaf,
-                    trackingType: libEx.trackingType,
-                    muscleGroup: muscle,
-                    restTime: null,
-                    sets: [WorkoutSet(value: 0, weight: 0)]
-                );
-                _showEditLeafDialog(newNode, isNew: true, onSaved: () {
-                  setState(() => targetList.add(newNode));
-                  widget.onUpdate();
-                });
-              },
-            )).toList(),
-          )).toList(),
-        ),
-      ),
-    );
-  }
+    bool isRootBlueprint = parent == null;
 
-  void _showEditLeafDialog(WorkoutNode node, {bool isNew = false, VoidCallback? onSaved}) {
-    List<WorkoutSet> tempSets = List.from(node.sets);
-    int rootRest = widget.plans[_currentIndex].restTime ?? 90;
-    TextEditingController localRestCtrl = TextEditingController(text: node.restTime?.toString() ?? "");
-
-    showDialog(context: context, builder: (ctx) => StatefulBuilder(builder: (context, setDialogState) => AlertDialog(
+    showDialog(context: context, builder: (ctx) => AlertDialog(
       backgroundColor: const Color(0xFF1A1A1A),
-      title: Text(node.title, style: const TextStyle(color: Colors.orangeAccent, fontWeight: FontWeight.bold)),
-      content: SizedBox(width: double.maxFinite, child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-        TextField(
-            keyboardType: TextInputType.number,
-            style: const TextStyle(color: Colors.white),
-            decoration: InputDecoration(
-              labelText: "Custom Intra-Set Recovery (s)",
-              labelStyle: const TextStyle(color: Colors.white70),
-              hintText: "Using Global: ${rootRest}s",
-              hintStyle: const TextStyle(color: Colors.white38),
-              prefixIcon: const Icon(Icons.shutter_speed, size: 18, color: Colors.white54),
-            ),
-            controller: localRestCtrl),
-        const Divider(height: 30, color: Colors.white24),
-        ...tempSets.asMap().entries.map((entry) => Row(children: [
-          Expanded(child: TextField(
-              keyboardType: TextInputType.number,
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                  labelText: node.trackingType == TrackingType.time ? "Seconds" : "Reps",
-                  labelStyle: const TextStyle(color: Colors.white54)),
-              controller: TextEditingController(text: entry.value.value.toString()),
-              onChanged: (v) => entry.value.value = int.tryParse(v) ?? 0)),
-          const SizedBox(width: 10),
-          if(node.trackingType == TrackingType.weightReps)
-            Expanded(child: TextField(
-                keyboardType: TextInputType.number,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                    labelText: "kg",
-                    labelStyle: TextStyle(color: Colors.white54)),
-                controller: TextEditingController(text: entry.value.weight.toString()),
-                onChanged: (v) => entry.value.weight = double.tryParse(v) ?? 0)),
-          IconButton(icon: const Icon(Icons.close, color: Colors.redAccent, size: 16), onPressed: () => setDialogState(() => tempSets.removeAt(entry.key))),
-        ])),
-        TextButton.icon(onPressed: () => setDialogState(() => tempSets.add(WorkoutSet(value: 0, weight: 0))), icon: const Icon(Icons.add, color: Colors.cyanAccent), label: const Text("ADD SET", style: TextStyle(color: Colors.cyanAccent))),
-      ]))),
+      title: Text(isRootBlueprint ? "BLUEPRINT SPECS" : "FOLDER SETTINGS",
+          style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+      content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+        TextField(controller: titleCtrl, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: "Identification Title")),
+
+        if (isRootBlueprint) ...[
+          const SizedBox(height: 25),
+          const Align(alignment: Alignment.centerLeft, child: Text("GLOBAL RECOVERY LOGIC (S):", style: TextStyle(color: Colors.white38, fontSize: 8, fontWeight: FontWeight.bold))),
+          const SizedBox(height: 10),
+          Row(children: [
+            Expanded(child: TextField(controller: setRestCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: "Set Rest"))),
+            const SizedBox(width: 15),
+            Expanded(child: TextField(controller: interRestCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: "Transition"))),
+          ]),
+        ]
+      ])),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("CANCEL", style: TextStyle(color: Colors.white54))),
-        ElevatedButton(onPressed: () {
-          setState(() {
-            node.sets = tempSets;
-            node.restTime = int.tryParse(localRestCtrl.text);
-          });
-          if (isNew && onSaved != null) onSaved();
+        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("CANCEL", style: TextStyle(color: Colors.white24))),
+        TextButton(onPressed: () {
+          node.title = titleCtrl.text;
+
+          if (isRootBlueprint) {
+            node.restTime = int.tryParse(setRestCtrl.text) ?? 90;
+            node.interExerciseRest = int.tryParse(interRestCtrl.text) ?? 180;
+          } else {
+            node.restTime = null;
+            node.interExerciseRest = 180;
+          }
+
+          widget.service.savePlan(node);
           widget.onUpdate();
           Navigator.pop(ctx);
-        }, child: const Text("SAVE", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold))),
+        }, child: const Text("SAVE", style: TextStyle(color: Colors.orangeAccent, fontWeight: FontWeight.bold)))
       ],
-    )));
+    ));
+  }
+
+  void _showFolderManager(WorkoutNode node, WorkoutNode? parent) {
+    showModalBottomSheet(context: context, backgroundColor: const Color(0xFF111111), builder: (ctx) => Wrap(children: [
+      ListTile(
+          leading: const Icon(Icons.edit, color: Colors.orangeAccent),
+          title: const Text("Modify Specs"),
+          onTap: () {
+            Navigator.pop(ctx);
+            _showRenameDialog(node, parent);
+          }),
+      ListTile(leading: const Icon(Icons.add_box, color: Colors.blueAccent), title: const Text("Add Inside"), onTap: () { Navigator.pop(ctx); _showAddDialog(node); }),
+      ListTile(leading: const Icon(Icons.delete_forever, color: Colors.redAccent), title: const Text("Delete"), onTap: () { Navigator.pop(ctx); _confirmDelete(node, parent); }),
+    ]));
+  }
+
+  void _showEditLeafDialog(WorkoutNode node, WorkoutNode parent) {
+    String unitLabel = "R";
+    ProtocolScope requiredScope = ProtocolScope.power;
+
+    switch (node.trackingType) {
+      case TrackingType.weightReps: unitLabel = "R"; requiredScope = ProtocolScope.power; break;
+      case TrackingType.repsOnly: unitLabel = "R"; requiredScope = ProtocolScope.kinetic; break;
+      case TrackingType.time: unitLabel = "SEC"; requiredScope = ProtocolScope.chronos; break;
+      case TrackingType.distance: unitLabel = "METERS"; requiredScope = ProtocolScope.velocity; break;
+    }
+
+    List<WorkoutSet> tempSets = node.sets.map((s) =>
+        WorkoutSet(value: s.value, weight: s.weight, isCompleted: s.isCompleted)).toList();
+
+    List<CustomProtocol> filteredProtocols = widget.service.getAllProtocols()
+        .where((p) => p.scopeIndex == requiredScope.index).toList();
+
+    int? selectedProtocolId = node.protocol.target?.id;
+
+    showDialog(context: context, builder: (ctx) => StatefulBuilder(builder: (context, setDialogState) {
+      CustomProtocol? currentSelection;
+      try { currentSelection = filteredProtocols.firstWhere((p) => p.id == selectedProtocolId); } catch (e) { currentSelection = null; }
+
+      return AlertDialog(
+        backgroundColor: const Color(0xFF1A1A1A),
+        title: Text(node.title, style: const TextStyle(color: Colors.orangeAccent)),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+            TextField(
+              controller: TextEditingController(text: node.restTime?.toString() ?? ""),
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(labelText: "Set Recovery (s)", hintText: "Global: ${parent.restTime ?? 90}s"),
+              onChanged: (v) => node.restTime = int.tryParse(v),
+            ),
+            const SizedBox(height: 20),
+            Align(alignment: Alignment.centerLeft, child: Text("ASSIGN ${requiredScope.name.toUpperCase()} SCRIPT:", style: const TextStyle(color: Colors.white38, fontSize: 8, fontWeight: FontWeight.bold))),
+            DropdownButton<CustomProtocol>(
+              value: currentSelection,
+              isExpanded: true,
+              hint: const Text("Select Protocol", style: TextStyle(color: Colors.white24, fontSize: 12)),
+              dropdownColor: const Color(0xFF111111),
+              items: filteredProtocols.map((p) => DropdownMenuItem<CustomProtocol>(value: p, child: Text(p.title, style: const TextStyle(color: Colors.cyanAccent, fontSize: 12)))).toList(),
+              onChanged: (val) => setDialogState(() => selectedProtocolId = val?.id),
+            ),
+            const Divider(height: 40),
+            ...tempSets.asMap().entries.map((e) => Row(children: [
+              Expanded(child: TextField(decoration: InputDecoration(labelText: unitLabel), controller: TextEditingController(text: e.value.value.toString()), onChanged: (v) => e.value.value = int.tryParse(v) ?? 0)),
+              const SizedBox(width: 10),
+              if (node.trackingType == TrackingType.weightReps)
+                Expanded(child: TextField(decoration: const InputDecoration(labelText: "KG"), controller: TextEditingController(text: e.value.weight.toString()), onChanged: (v) => e.value.weight = double.tryParse(v) ?? 0)),
+              IconButton(icon: const Icon(Icons.close, color: Colors.redAccent, size: 16), onPressed: () => setDialogState(() => tempSets.removeAt(e.key))),
+            ])),
+            TextButton.icon(onPressed: () => setDialogState(() => tempSets.add(WorkoutSet(value: 10, weight: 0))), icon: const Icon(Icons.add, color: Colors.orangeAccent), label: const Text("ADD SET", style: TextStyle(color: Colors.orangeAccent))),
+          ])),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("CANCEL", style: TextStyle(color: Colors.white38))),
+          TextButton(onPressed: () {
+            node.sets.clear(); node.sets.addAll(tempSets);
+            if (selectedProtocolId != null) { node.protocol.target = filteredProtocols.firstWhere((p) => p.id == selectedProtocolId); } else { node.protocol.target = null; }
+            widget.service.savePlan(node); widget.onUpdate(); Navigator.pop(ctx);
+          }, child: const Text("SAVE", style: TextStyle(color: Colors.orangeAccent, fontWeight: FontWeight.bold)))
+        ],
+      );
+    }));
   }
 
   void _showAddRootDialog() {
@@ -323,94 +269,84 @@ class _TreePageState extends State<TreePage> {
     showDialog(context: context, builder: (ctx) => AlertDialog(
       backgroundColor: const Color(0xFF1A1A1A),
       title: const Text("New Training Module", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-      content: TextField(controller: ctrl, autofocus: true, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(hintText: "e.g. Arnold Split", hintStyle: TextStyle(color: Colors.white38))),
+      content: TextField(controller: ctrl, autofocus: true, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(hintText: "e.g. Arnold Split")),
       actions: [TextButton(onPressed: () {
-        if(ctrl.text.isNotEmpty) setState(() => widget.plans.add(WorkoutNode(title: ctrl.text, type: NodeType.parent, restTime: 90, interExerciseRest: 180)));
-        widget.onUpdate(); Navigator.pop(ctx);
-      }, child: const Text("INITIALIZE", style: TextStyle(color: Colors.orangeAccent, fontWeight: FontWeight.bold)))],
+        if(ctrl.text.isNotEmpty) {
+          final newNode = WorkoutNode(title: ctrl.text, typeIndex: NodeType.parent.index, restTime: 90, interExerciseRest: 180);
+          widget.service.savePlan(newNode);
+          widget.onUpdate();
+        }
+        Navigator.pop(ctx);
+      }, child: const Text("INITIALIZE", style: TextStyle(color: Colors.orangeAccent)))],
     ));
   }
 
-  void _showFolderNameDialog(List<WorkoutNode> targetList) {
+  void _showAddDialog(WorkoutNode targetNode) {
+    showModalBottomSheet(context: context, backgroundColor: const Color(0xFF111111), builder: (ctx) => Column(mainAxisSize: MainAxisSize.min, children: [
+      ListTile(leading: const Icon(Icons.create_new_folder), title: const Text("SUB-MODULE"), onTap: () { Navigator.pop(ctx); _showFolderNameDialog(targetNode); }),
+      ListTile(leading: const Icon(Icons.fitness_center), title: const Text("EXERCISE"), onTap: () { Navigator.pop(ctx); _showLibraryPicker(targetNode); }),
+    ]));
+  }
+
+  void _showLibraryPicker(WorkoutNode parent) {
+    showModalBottomSheet(context: context, backgroundColor: const Color(0xFF111111), isScrollControlled: true, builder: (ctx) => DraggableScrollableSheet(
+      initialChildSize: 0.7, expand: false, builder: (context, scrollController) => ListView(
+      controller: scrollController,
+      children: widget.library.keys.map((muscle) => ExpansionTile(
+        title: Text(muscle.toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white)),
+        children: widget.library[muscle]!.map((libEx) => ListTile(
+          title: Text(libEx.name),
+          onTap: () {
+            Navigator.pop(ctx);
+            final newNode = WorkoutNode(title: libEx.name, typeIndex: NodeType.leaf.index, trackingIndex: libEx.trackingType.index, muscleGroup: muscle);
+            newNode.sets.add(WorkoutSet(value: 10, weight: 0));
+            parent.children.add(newNode);
+            widget.service.savePlan(parent);
+            widget.onUpdate();
+          },
+        )).toList(),
+      )).toList(),
+    ),
+    ),
+    );
+  }
+
+  void _showLeafSettings(WorkoutNode node, WorkoutNode parent) {
+    showModalBottomSheet(context: context, backgroundColor: const Color(0xFF111111), builder: (ctx) => Wrap(children: [
+      ListTile(leading: const Icon(Icons.edit, color: Colors.orangeAccent), title: const Text("Modify Logic"), onTap: () { Navigator.pop(ctx); _showEditLeafDialog(node, parent); }),
+      ListTile(leading: const Icon(Icons.delete, color: Colors.redAccent), title: const Text("Remove"), onTap: () { Navigator.pop(ctx); _confirmDelete(node, parent); }),
+    ]));
+  }
+
+  void _showFolderNameDialog(WorkoutNode parent) {
     TextEditingController ctrl = TextEditingController();
     showDialog(context: context, builder: (ctx) => AlertDialog(
       backgroundColor: const Color(0xFF1A1A1A),
-      title: const Text("Sub-Module Title", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+      title: const Text("Folder Title"),
       content: TextField(controller: ctrl, autofocus: true, style: const TextStyle(color: Colors.white)),
       actions: [TextButton(onPressed: () {
-        if(ctrl.text.isNotEmpty) setState(() => targetList.add(WorkoutNode(title: ctrl.text, type: NodeType.parent)));
-        widget.onUpdate(); Navigator.pop(ctx);
-      }, child: const Text("ADD", style: TextStyle(color: Colors.orangeAccent, fontWeight: FontWeight.bold)))],
+        if(ctrl.text.isNotEmpty) {
+          parent.children.add(WorkoutNode(title: ctrl.text, typeIndex: NodeType.parent.index));
+          widget.service.savePlan(parent);
+          widget.onUpdate();
+        }
+        Navigator.pop(ctx);
+      }, child: const Text("ADD"))],
     ));
   }
 
-  void _showFolderManager(WorkoutNode node, List<WorkoutNode> parentList) {
-    bool isRoot = widget.plans.contains(node);
-    showModalBottomSheet(context: context, backgroundColor: const Color(0xFF111111), builder: (ctx) => Wrap(children: [
-      ListTile(
-          leading: const Icon(Icons.edit, color: Colors.orangeAccent),
-          title: Text(isRoot ? "Rename / Global Protocol" : "Rename", style: const TextStyle(color: Colors.white)),
-          onTap: () { Navigator.pop(ctx); _showRenameDialog(node, isRoot); }),
-      ListTile(leading: const Icon(Icons.add_box, color: Colors.blueAccent), title: const Text("Add Inside", style: TextStyle(color: Colors.white)), onTap: () { Navigator.pop(ctx); _showAddDialog(node.children); }),
-      ListTile(leading: const Icon(Icons.delete_forever, color: Colors.redAccent), title: const Text("Delete", style: TextStyle(color: Colors.white)), onTap: () { Navigator.pop(ctx); _confirmDelete(node, parentList); }),
-    ]));
-  }
-
-  void _showLeafSettings(WorkoutNode node, List<WorkoutNode> parentList) {
-    showModalBottomSheet(context: context, backgroundColor: const Color(0xFF111111), builder: (ctx) => Wrap(children: [
-      ListTile(leading: const Icon(Icons.edit, color: Colors.orangeAccent), title: const Text("Modify Set Targets", style: TextStyle(color: Colors.white)), onTap: () { Navigator.pop(ctx); _showEditLeafDialog(node); }),
-      ListTile(leading: const Icon(Icons.delete, color: Colors.redAccent), title: const Text("Remove", style: TextStyle(color: Colors.white)), onTap: () { Navigator.pop(ctx); _confirmDelete(node, parentList); }),
-    ]));
-  }
-
-  void _showRenameDialog(WorkoutNode node, bool isRoot) {
-    TextEditingController titleCtrl = TextEditingController(text: node.title);
-    TextEditingController globalRestCtrl = TextEditingController(text: node.restTime?.toString() ?? "90");
-    TextEditingController transRestCtrl = TextEditingController(text: node.interExerciseRest.toString());
-
+  void _confirmDelete(WorkoutNode node, WorkoutNode? parent) {
     showDialog(context: context, builder: (ctx) => AlertDialog(
       backgroundColor: const Color(0xFF1A1A1A),
-      title: const Text("Sync Data", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-      content: Column(mainAxisSize: MainAxisSize.min, children: [
-        TextField(controller: titleCtrl, autofocus: true, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: "Identification Title", labelStyle: TextStyle(color: Colors.white70))),
-        if (isRoot) ...[
-          const SizedBox(height: 20),
-          const Align(alignment: Alignment.centerLeft, child: Text("PLAN-WIDE PROTOCOLS (S)", style: TextStyle(color: Colors.white54, fontSize: 8, fontWeight: FontWeight.bold))),
-          const SizedBox(height: 10),
-          Row(children: [
-            Expanded(child: TextField(controller: globalRestCtrl, style: const TextStyle(color: Colors.white), keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: "Standard Recovery", labelStyle: TextStyle(fontSize: 10, color: Colors.white38)))),
-            const SizedBox(width: 10),
-            Expanded(child: TextField(controller: transRestCtrl, style: const TextStyle(color: Colors.white), keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: "Module Transition", labelStyle: TextStyle(fontSize: 10, color: Colors.white38)))),
-          ]),
-        ]
-      ]),
+      title: const Text("Terminate?"),
       actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("NO")),
         TextButton(onPressed: () {
-          setState(() {
-            node.title = titleCtrl.text;
-            if (isRoot) {
-              node.restTime = int.tryParse(globalRestCtrl.text) ?? 90;
-              node.interExerciseRest = int.tryParse(transRestCtrl.text) ?? 180;
-            }
-          });
+          if (parent != null) { parent.children.remove(node); widget.service.savePlan(parent); }
+          else { widget.service.deletePlan(node.id); }
           widget.onUpdate(); Navigator.pop(ctx);
-        }, child: const Text("SAVE", style: TextStyle(color: Colors.orangeAccent, fontWeight: FontWeight.bold)))
+        }, child: const Text("DELETE", style: TextStyle(color: Colors.redAccent))),
       ],
     ));
   }
-
-  void _confirmDelete(WorkoutNode node, List<WorkoutNode> parentList) {
-    showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          backgroundColor: const Color(0xFF1A1A1A),
-          title: const Text("Terminate?", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("NO", style: TextStyle(color: Colors.white54))),
-            TextButton(onPressed: () { setState(() => parentList.remove(node)); widget.onUpdate(); Navigator.pop(ctx); }, child: const Text("DELETE", style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold))),
-          ],
-        ));
-  }
-
-  Widget _buildEmptyBlueprintHint() => const Center(child: Text("Tap + to build your first Training Module", style: TextStyle(color: Colors.white38, fontSize: 12)));
 }

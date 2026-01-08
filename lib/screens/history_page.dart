@@ -1,16 +1,17 @@
 import 'package:flutter/material.dart';
 import '../models/workout_log.dart';
 import '../models/workout_node.dart';
+import '../services/objectbox_service.dart';
 import '../widgets/history_widgets.dart';
 
 class HistoryPage extends StatefulWidget {
-  final List<WorkoutLog> logs;
+  final ObjectBoxService service;
   final List<WorkoutNode> plans;
   final VoidCallback onUpdate;
 
   const HistoryPage({
     super.key,
-    required this.logs,
+    required this.service,
     required this.plans,
     required this.onUpdate
   });
@@ -21,7 +22,9 @@ class HistoryPage extends StatefulWidget {
 
 class _HistoryPageState extends State<HistoryPage> {
   late PageController _pageController;
-  int _currentPageIndex = 1000;
+
+  static const int calendarOrigin = 10000;
+  int _currentPageIndex = calendarOrigin;
   String? selectedFolderFilter;
 
   @override
@@ -53,7 +56,7 @@ class _HistoryPageState extends State<HistoryPage> {
         controller: _pageController,
         onPageChanged: (index) => setState(() => _currentPageIndex = index),
         itemBuilder: (context, index) {
-          DateTime date = DateTime.now().add(Duration(days: index - 1000));
+          DateTime date = DateTime.now().add(Duration(days: index - calendarOrigin));
           return _buildDailyLogView(date);
         },
       ),
@@ -61,10 +64,7 @@ class _HistoryPageState extends State<HistoryPage> {
   }
 
   Widget _buildDailyLogView(DateTime date) {
-    List<WorkoutLog> dayLogs = widget.logs.where((log) =>
-    log.date.year == date.year &&
-        log.date.month == date.month &&
-        log.date.day == date.day).toList();
+    List<WorkoutLog> dayLogs = widget.service.getLogsForDay(date);
 
     bool isToday = date.day == DateTime.now().day &&
         date.month == DateTime.now().month &&
@@ -98,7 +98,7 @@ class _HistoryPageState extends State<HistoryPage> {
                 title: log.exerciseName,
                 onEdit: () => _showEditLogDialog(log),
                 onDelete: () => _confirmDeleteLog(log),
-                setRows: log.performedSets.asMap().entries.map((entry) => ListTile(
+                setRows: log.performedSets.toList().asMap().entries.map((entry) => ListTile(
                   dense: true,
                   visualDensity: VisualDensity.compact,
                   leading: Text("${entry.key + 1}",
@@ -117,7 +117,7 @@ class _HistoryPageState extends State<HistoryPage> {
   }
 
   void _showEditLogDialog(WorkoutLog log) {
-    List<WorkoutSet> tempSets = log.performedSets.map((s) =>
+    List<WorkoutSet> tempSets = log.performedSets.toList().map((s) =>
         WorkoutSet(value: s.value, weight: s.weight, isCompleted: s.isCompleted)).toList();
 
     showDialog(
@@ -177,6 +177,7 @@ class _HistoryPageState extends State<HistoryPage> {
                 setState(() {
                   log.performedSets.clear();
                   log.performedSets.addAll(tempSets);
+                  widget.service.saveLog(log);
                 });
                 widget.onUpdate();
                 Navigator.pop(ctx);
@@ -201,7 +202,9 @@ class _HistoryPageState extends State<HistoryPage> {
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("CANCEL", style: TextStyle(color: Colors.white54))),
           TextButton(
             onPressed: () {
-              setState(() => widget.logs.remove(logToDelete));
+              setState(() {
+                widget.service.deleteLog(logToDelete.id);
+              });
               widget.onUpdate();
               Navigator.pop(ctx);
             },

@@ -4,14 +4,15 @@ import 'package:flutter/services.dart';
 import '../models/workout_node.dart';
 import '../models/workout_log.dart';
 import '../models/goal_node.dart';
+import '../services/objectbox_service.dart';
+import '../services/titan_engine.dart';
 
 class SessionCompletePage extends StatefulWidget {
   final String title;
   final String dailyObjective;
   final List<WorkoutNode> exercises;
-  final List<WorkoutLog> logs;
+  final ObjectBoxService service;
   final VoidCallback onUpdate;
-  final Function(WorkoutLog)? onLog;
   final GoalNode? roadmap;
   final int rootSetRest;
   final int rootInterRest;
@@ -21,11 +22,10 @@ class SessionCompletePage extends StatefulWidget {
     required this.title,
     required this.dailyObjective,
     required this.exercises,
-    required this.logs,
+    required this.service,
     required this.onUpdate,
     required this.rootSetRest,
     required this.rootInterRest,
-    this.onLog,
     this.roadmap,
   });
 
@@ -41,13 +41,14 @@ class _SessionCompletePageState extends State<SessionCompletePage> {
   bool _isTimerActive = false;
   bool _isOvertime = false;
   bool _isInterExerciseRest = false;
-  Map<String, List<WorkoutSet>> _actualPerformance = {};
+
+  final Map<String, List<WorkoutSet>> _actualPerformance = {};
 
   @override
   void initState() {
     super.initState();
     for (var ex in widget.exercises) {
-      _actualPerformance[ex.id] = [];
+      _actualPerformance[ex.id.toString()] = [];
     }
   }
 
@@ -58,7 +59,9 @@ class _SessionCompletePageState extends State<SessionCompletePage> {
   }
 
   void _showPerformanceInput(WorkoutNode ex, int setIndex) {
-    final targetSet = ex.sets[setIndex];
+    final setsList = ex.sets.toList();
+    final targetSet = setsList[setIndex];
+
     TextEditingController valCtrl = TextEditingController(text: targetSet.value.toString());
     TextEditingController weightCtrl = TextEditingController(text: targetSet.weight.toString());
 
@@ -69,56 +72,53 @@ class _SessionCompletePageState extends State<SessionCompletePage> {
         backgroundColor: const Color(0xFF1A1A1A),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
         title: Text("LOG DATA: SET ${setIndex + 1}",
-            style: const TextStyle(color: Colors.cyanAccent, fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 1)),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
+            style: const TextStyle(color: Colors.cyanAccent, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 2)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: valCtrl,
+              keyboardType: TextInputType.number,
+              autofocus: true,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                labelText: ex.trackingType == TrackingType.time ? "Actual Seconds" : "Actual Reps",
+                labelStyle: const TextStyle(color: Colors.white54, fontSize: 10),
+                focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.cyanAccent)),
+              ),
+            ),
+            if (ex.trackingType == TrackingType.weightReps)
               TextField(
-                controller: valCtrl,
+                controller: weightCtrl,
                 keyboardType: TextInputType.number,
-                autofocus: true,
                 style: const TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  labelText: ex.trackingType == TrackingType.time ? "Actual Seconds" : "Actual Reps/Distance",
-                  labelStyle: const TextStyle(color: Colors.white54, fontSize: 12),
-                  focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.cyanAccent)),
+                decoration: const InputDecoration(
+                  labelText: "Actual Weight (kg)",
+                  labelStyle: TextStyle(color: Colors.white54, fontSize: 10),
+                  focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.cyanAccent)),
                 ),
               ),
-              if (ex.trackingType == TrackingType.weightReps)
-                TextField(
-                  controller: weightCtrl,
-                  keyboardType: TextInputType.number,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: const InputDecoration(
-                    labelText: "Actual Weight (kg)",
-                    labelStyle: TextStyle(color: Colors.white54, fontSize: 12),
-                    focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.cyanAccent)),
-                  ),
-                ),
-            ],
-          ),
+          ],
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text("ABORT", style: TextStyle(color: Colors.white38)),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("ABORT", style: TextStyle(color: Colors.white24))),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.cyanAccent),
             onPressed: () {
-              final actual = WorkoutSet(
-                value: int.tryParse(valCtrl.text) ?? 0,
-                weight: double.tryParse(weightCtrl.text) ?? 0.0,
-                isCompleted: true,
-              );
-              setState(() => _actualPerformance[ex.id]!.add(actual));
+              final actual = WorkoutSet()
+                ..value = int.tryParse(valCtrl.text) ?? 0
+                ..weight = double.tryParse(weightCtrl.text) ?? 0.0
+                ..isCompleted = true;
+
+              setState(() => _actualPerformance[ex.id.toString()]!.add(actual));
               Navigator.pop(ctx);
-              bool isLastSet = setIndex == ex.sets.length - 1;
-              bool hasMoreEx = _currentExIdx < widget.exercises.length - 1;
-              if (isLastSet && hasMoreEx) {
+
+              bool isLastSetOfExercise = setIndex == setsList.length - 1;
+              bool hasMoreExercises = _currentExIdx < widget.exercises.length - 1;
+
+              if (isLastSetOfExercise && hasMoreExercises) {
                 _startTimer(widget.rootInterRest, true);
-              } else if (!isLastSet) {
+              } else if (!isLastSetOfExercise) {
                 int restToUse = ex.restTime ?? widget.rootSetRest;
                 _startTimer(restToUse, false);
               } else {
@@ -140,6 +140,7 @@ class _SessionCompletePageState extends State<SessionCompletePage> {
       _isInterExerciseRest = isExerciseChange;
     });
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) return;
       setState(() {
         _secondsRemaining--;
         if (_secondsRemaining <= 0) {
@@ -166,19 +167,34 @@ class _SessionCompletePageState extends State<SessionCompletePage> {
     });
   }
 
-  void _terminateSession() {
+  Future<void> _terminateSession() async {
     _timer?.cancel();
+
     for (var ex in widget.exercises) {
-      final actualSets = _actualPerformance[ex.id] ?? [];
-      if (actualSets.isNotEmpty && widget.onLog != null) {
-        widget.onLog!(WorkoutLog(
-          date: DateTime.now(),
-          exerciseName: ex.title,
-          muscleGroup: ex.muscleGroup,
-          performedSets: actualSets,
-        ));
+      final actuals = _actualPerformance[ex.id.toString()] ?? [];
+      if (actuals.isEmpty) continue;
+
+      final log = WorkoutLog()
+        ..date = DateTime.now()
+        ..exerciseName = ex.title
+        ..muscleGroup = ex.muscleGroup;
+      log.performedSets.addAll(actuals);
+      widget.service.saveLog(log);
+
+      if (ex.protocol.target != null) {
+        final nextSessionSets = TitanEngine.execute(
+          protocol: ex.protocol.target!,
+          actualPerformance: actuals,
+          protocolBox: widget.service.protocolBox,
+        );
+
+        ex.sets.clear();
+        ex.sets.addAll(nextSessionSets);
       }
+
+      widget.service.savePlan(ex);
     }
+
     widget.onUpdate();
     Navigator.of(context).pop();
   }
@@ -193,9 +209,7 @@ class _SessionCompletePageState extends State<SessionCompletePage> {
           children: [
             _buildStatusBar(),
             Expanded(
-              child: _isTimerActive
-                  ? _buildTimerHUD()
-                  : _buildExerciseFocusHUD(currentEx),
+              child: _isTimerActive ? _buildTimerHUD() : _buildExerciseFocusHUD(currentEx),
             ),
             _buildMainActionArea(currentEx),
           ],
@@ -204,7 +218,7 @@ class _SessionCompletePageState extends State<SessionCompletePage> {
     );
   }
 
-  Widget _buildTopStatus() {
+  Widget _buildStatusBar() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 25.0, vertical: 15),
       child: Column(
@@ -213,22 +227,20 @@ class _SessionCompletePageState extends State<SessionCompletePage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text("MISSION: ${widget.title.toUpperCase()}",
-                  style: const TextStyle(color: Colors.white54, fontSize: 8, letterSpacing: 2, fontWeight: FontWeight.bold)),
-              Text("PHASE ${_currentExIdx + 1}/${widget.exercises.length}",
-                  style: const TextStyle(color: Colors.white54, fontSize: 8, fontWeight: FontWeight.bold)),
+              Text("MISSION: ${widget.title.toUpperCase()}", style: const TextStyle(color: Colors.white30, fontSize: 8, letterSpacing: 2, fontWeight: FontWeight.bold)),
+              Text("PHASE ${_currentExIdx + 1}/${widget.exercises.length}", style: const TextStyle(color: Colors.white38, fontSize: 8, fontWeight: FontWeight.bold)),
             ],
           ),
           const SizedBox(height: 5),
           Text(widget.dailyObjective.isEmpty ? "EXECUTE ASSIGNED PROTOCOL" : widget.dailyObjective.toUpperCase(),
               maxLines: 1, overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w900)),
+              style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w900)),
           const SizedBox(height: 12),
           LinearProgressIndicator(
-            value: (_currentExIdx + 1) / widget.exercises.length,
-            backgroundColor: Colors.white.withOpacity(0.1),
-            color: Colors.orangeAccent,
-            minHeight: 3,
+              value: (_currentExIdx + 1) / widget.exercises.length,
+              backgroundColor: Colors.white.withOpacity(0.05),
+              color: Colors.orangeAccent,
+              minHeight: 2
           ),
         ],
       ),
@@ -236,45 +248,40 @@ class _SessionCompletePageState extends State<SessionCompletePage> {
   }
 
   Widget _buildExerciseFocusHUD(WorkoutNode ex) {
+    final sets = ex.sets.toList();
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 30),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const SizedBox(height: 20),
-          Text(ex.muscleGroup?.toUpperCase() ?? "GENERAL",
-              style: const TextStyle(color: Colors.cyanAccent, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 5)),
+          const SizedBox(height: 30),
+          Text(ex.muscleGroup?.toUpperCase() ?? "GENERAL", style: const TextStyle(color: Colors.cyanAccent, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 5)),
           const SizedBox(height: 10),
-          Text(ex.title.toUpperCase(),
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white, fontSize: 30, fontWeight: FontWeight.w900, letterSpacing: -1)),
+          Text(ex.title.toUpperCase(), textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w900, letterSpacing: -1)),
           const SizedBox(height: 40),
-          ...ex.sets.asMap().entries.map((entry) {
+          ...sets.asMap().entries.map((entry) {
             bool isCurrent = entry.key == _currentSetIdx;
             bool isDone = entry.key < _currentSetIdx;
             String unit = (ex.trackingType == TrackingType.time) ? "SEC" : "REPS";
             return AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
+              duration: const Duration(milliseconds: 300),
               margin: const EdgeInsets.only(bottom: 12),
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(22),
               decoration: BoxDecoration(
-                color: isCurrent ? Colors.white.withOpacity(0.08) : Colors.white.withOpacity(0.02),
-                borderRadius: BorderRadius.circular(15),
-                border: Border.all(color: isCurrent ? Colors.orangeAccent.withOpacity(0.5) : Colors.white.withOpacity(0.05)),
+                color: isCurrent ? Colors.white.withOpacity(0.07) : Colors.white.withOpacity(0.02),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: isCurrent ? Colors.orangeAccent.withOpacity(0.4) : Colors.white.withOpacity(0.05)),
               ),
               child: Row(
                 children: [
-                  Text("${entry.key + 1}", style: TextStyle(color: isCurrent ? Colors.orangeAccent : Colors.white38, fontWeight: FontWeight.bold)),
+                  Text("${entry.key + 1}", style: TextStyle(color: isCurrent ? Colors.orangeAccent : Colors.white24, fontWeight: FontWeight.bold)),
                   const SizedBox(width: 25),
-                  Text("${entry.value.value} $unit",
-                      style: TextStyle(color: isCurrent ? Colors.white : Colors.white54, fontWeight: FontWeight.w900, fontSize: 18)),
+                  Text("${entry.value.value} $unit", style: TextStyle(color: isCurrent ? Colors.white : Colors.white38, fontWeight: FontWeight.w900, fontSize: 18)),
                   const Spacer(),
                   if (ex.trackingType == TrackingType.weightReps)
-                    Text("${entry.value.weight} KG",
-                        style: TextStyle(color: isCurrent ? Colors.white : Colors.white38, fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'monospace')),
+                    Text("${entry.value.weight} KG", style: TextStyle(color: isCurrent ? Colors.white : Colors.white24, fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'monospace')),
                   const SizedBox(width: 15),
                   Icon(isDone ? Icons.check_circle : (isCurrent ? Icons.bolt : Icons.radio_button_unchecked),
-                      color: isDone ? Colors.greenAccent : (isCurrent ? Colors.orangeAccent : Colors.white24), size: 20),
+                      color: isDone ? Colors.greenAccent : (isCurrent ? Colors.orangeAccent : Colors.white12), size: 18),
                 ],
               ),
             );
@@ -288,32 +295,26 @@ class _SessionCompletePageState extends State<SessionCompletePage> {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Icon(_isInterExerciseRest ? Icons.sync : Icons.timer_outlined,
-            color: _isOvertime ? Colors.redAccent : Colors.cyanAccent, size: 45),
+        Icon(_isInterExerciseRest ? Icons.sync : Icons.shutter_speed_outlined,
+            color: _isOvertime ? Colors.redAccent : Colors.cyanAccent, size: 50),
         const SizedBox(height: 20),
-        Text(_isInterExerciseRest ? "INTER-MODULE RECOVERY" : "SYSTEM RECHARGE IN PROGRESS",
-            style: const TextStyle(color: Colors.white54, fontSize: 10, letterSpacing: 2, fontWeight: FontWeight.bold)),
+        Text(_isInterExerciseRest ? "TRANSITION RECOVERY" : "SYSTEM RECHARGE",
+            style: const TextStyle(color: Colors.white38, fontSize: 10, letterSpacing: 4, fontWeight: FontWeight.bold)),
         Text(
           _secondsRemaining <= 0 ? "-${_secondsRemaining.abs()}" : _secondsRemaining.toString(),
-          style: TextStyle(
-              fontSize: 120,
-              fontWeight: FontWeight.w900,
-              fontFamily: 'monospace',
-              color: _isOvertime ? Colors.redAccent : Colors.white,
-              letterSpacing: -5
-          ),
+          style: TextStyle(fontSize: 130, fontWeight: FontWeight.w900, fontFamily: 'monospace', color: _isOvertime ? Colors.redAccent : Colors.white),
         ),
-        Text(_isOvertime ? "OVERTIME: COMMENCE TASK IMMEDIATELY" : "SECONDS REMAINING",
-            style: TextStyle(color: _isOvertime ? Colors.redAccent : Colors.white38, fontSize: 10, fontWeight: FontWeight.bold)),
+        Text(_isOvertime ? "OVERTIME DETECTED" : "SECONDS REMAINING",
+            style: TextStyle(color: _isOvertime ? Colors.redAccent : Colors.white24, fontSize: 10, fontWeight: FontWeight.bold)),
       ],
     );
   }
 
   Widget _buildMainActionArea(WorkoutNode ex) {
-    String label = _isTimerActive ? "I AM READY" : "LOG SET & REST";
+    String label = _isTimerActive ? "INITIATE PHASE" : "LOG & RECHARGE";
     Color btnColor = _isTimerActive ? Colors.cyanAccent : Colors.orangeAccent;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 25),
+      padding: const EdgeInsets.all(30),
       child: Column(
         children: [
           ElevatedButton(
@@ -321,27 +322,17 @@ class _SessionCompletePageState extends State<SessionCompletePage> {
               backgroundColor: btnColor,
               minimumSize: const Size(double.infinity, 80),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
-              elevation: 0,
             ),
-            onPressed: () {
-              if (_isTimerActive) {
-                _onReadyPressed();
-              } else {
-                _showPerformanceInput(ex, _currentSetIdx);
-              }
-            },
-            child: Text(label, style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w900, letterSpacing: 2, fontSize: 20)),
+            onPressed: () => _isTimerActive ? _onReadyPressed() : _showPerformanceInput(ex, _currentSetIdx),
+            child: Text(label, style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w900, letterSpacing: 2, fontSize: 18)),
           ),
           if (!_isTimerActive)
             TextButton(
               onPressed: _terminateSession,
-              child: const Text("TERMINATE PROTOCOL",
-                  style: TextStyle(color: Colors.white54, fontSize: 9, letterSpacing: 1, fontWeight: FontWeight.bold)),
+              child: const Text("TERMINATE MISSION", style: TextStyle(color: Colors.white24, fontSize: 9, letterSpacing: 2, fontWeight: FontWeight.bold)),
             )
         ],
       ),
     );
   }
-
-  Widget _buildStatusBar() => _buildTopStatus();
 }

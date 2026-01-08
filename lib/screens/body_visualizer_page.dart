@@ -1,7 +1,6 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import '../models/workout_log.dart';
-import '../models/workout_node.dart';
 import '../widgets/body_painter.dart';
 
 class BodyVisualizerPage extends StatelessWidget {

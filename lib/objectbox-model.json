@@ -1,0 +1,237 @@
+{
+  "_note1": "KEEP THIS FILE! Check it into a version control system (VCS) like git.",
+  "_note2": "ObjectBox manages crucial IDs for your object model. See docs for details.",
+  "_note3": "If you have VCS merge conflicts, you must resolve them according to ObjectBox docs.",
+  "entities": [
+    {
+      "id": "1:5391456175230400220",
+      "lastPropertyId": "8:4722859382961758948",
+      "name": "GoalNode",
+      "properties": [
+        {
+          "id": "1:5419726589228525965",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:5957689107567554867",
+          "name": "title",
+          "type": 9
+        },
+        {
+          "id": "3:3468301901147291609",
+          "name": "typeIndex",
+          "type": 6
+        },
+        {
+          "id": "4:1103039267992361242",
+          "name": "currentWeight",
+          "type": 8
+        },
+        {
+          "id": "5:9197052696326697112",
+          "name": "targetWeight",
+          "type": 8
+        },
+        {
+          "id": "6:2487996990930233349",
+          "name": "weightStep",
+          "type": 8
+        },
+        {
+          "id": "7:4502725520854733199",
+          "name": "totalSessions",
+          "type": 6
+        },
+        {
+          "id": "8:4722859382961758948",
+          "name": "completedSessions",
+          "type": 6
+        }
+      ],
+      "relations": [
+        {
+          "id": "1:3464219401384539183",
+          "name": "children",
+          "targetId": "1:5391456175230400220"
+        },
+        {
+          "id": "2:7519553410864308563",
+          "name": "sets",
+          "targetId": "4:7399304807380505350"
+        }
+      ]
+    },
+    {
+      "id": "2:8315263967946897502",
+      "lastPropertyId": "4:118427517800830421",
+      "name": "WorkoutLog",
+      "properties": [
+        {
+          "id": "1:6629190812025929902",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:2943064485772794778",
+          "name": "date",
+          "type": 10
+        },
+        {
+          "id": "3:8688050740789899992",
+          "name": "exerciseName",
+          "type": 9
+        },
+        {
+          "id": "4:118427517800830421",
+          "name": "muscleGroup",
+          "type": 9
+        }
+      ],
+      "relations": [
+        {
+          "id": "3:5404582854078675399",
+          "name": "performedSets",
+          "targetId": "4:7399304807380505350"
+        }
+      ]
+    },
+    {
+      "id": "3:2062288298101410463",
+      "lastPropertyId": "10:8884678089084243580",
+      "name": "WorkoutNode",
+      "properties": [
+        {
+          "id": "1:5586779259402126830",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:2633728282814289888",
+          "name": "title",
+          "type": 9
+        },
+        {
+          "id": "3:8318980691276120445",
+          "name": "typeIndex",
+          "type": 6
+        },
+        {
+          "id": "4:6248627912717057310",
+          "name": "trackingIndex",
+          "type": 6
+        },
+        {
+          "id": "5:2034944599738584817",
+          "name": "restTime",
+          "type": 6
+        },
+        {
+          "id": "6:5150816923346741052",
+          "name": "interExerciseRest",
+          "type": 6
+        },
+        {
+          "id": "7:8802079275716076164",
+          "name": "muscleGroup",
+          "type": 9
+        },
+        {
+          "id": "10:8884678089084243580",
+          "name": "protocolId",
+          "indexId": "1:6851795456588437109",
+          "type": 11,
+          "flags": 520,
+          "relationTarget": "CustomProtocol"
+        }
+      ],
+      "relations": [
+        {
+          "id": "4:1854053538483659513",
+          "name": "children",
+          "targetId": "3:2062288298101410463"
+        },
+        {
+          "id": "5:1934228833631167816",
+          "name": "sets",
+          "targetId": "4:7399304807380505350"
+        }
+      ]
+    },
+    {
+      "id": "4:7399304807380505350",
+      "lastPropertyId": "4:685527478610085349",
+      "name": "WorkoutSet",
+      "properties": [
+        {
+          "id": "1:868351317927102195",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:2651980766900392210",
+          "name": "value",
+          "type": 6
+        },
+        {
+          "id": "3:7550364745997980272",
+          "name": "weight",
+          "type": 8
+        },
+        {
+          "id": "4:685527478610085349",
+          "name": "isCompleted",
+          "type": 1
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "5:8860872662423777712",
+      "lastPropertyId": "4:5920543652844262617",
+      "name": "CustomProtocol",
+      "properties": [
+        {
+          "id": "1:4850041679599861506",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:1913609192515049944",
+          "name": "title",
+          "type": 9
+        },
+        {
+          "id": "3:696834328279942427",
+          "name": "script",
+          "type": 9
+        },
+        {
+          "id": "4:5920543652844262617",
+          "name": "scopeIndex",
+          "type": 6
+        }
+      ],
+      "relations": []
+    }
+  ],
+  "lastEntityId": "5:8860872662423777712",
+  "lastIndexId": "1:6851795456588437109",
+  "lastRelationId": "5:1934228833631167816",
+  "lastSequenceId": "0:0",
+  "modelVersion": 5,
+  "modelVersionParserMinimum": 5,
+  "retiredEntityUids": [],
+  "retiredIndexUids": [],
+  "retiredPropertyUids": [
+    7765645518388265976,
+    3422544439003629388
+  ],
+  "retiredRelationUids": [],
+  "version": 1
+}
