@@ -90,6 +90,7 @@ class _TreePageState extends State<TreePage> {
       isSelected: isSelected,
       isPressing: false,
       onTap: () => _handleModuleLaunch(plan),
+      // --- IDENTIFICATION: Roots pass NULL as parent ---
       onSettings: () => _showFolderManager(plan, null),
     );
   }
@@ -128,6 +129,7 @@ class _TreePageState extends State<TreePage> {
       final subChildren = node.children.toList();
       return PlannerFolderTile(
         title: node.title,
+        // --- IDENTIFICATION: Folders pass their ACTUAL parent ---
         onManage: () => _showFolderManager(node, parent),
         children: subChildren.isEmpty
             ? [const Text("Empty", style: TextStyle(color: Colors.white38, fontSize: 11))]
@@ -141,6 +143,7 @@ class _TreePageState extends State<TreePage> {
     TextEditingController setRestCtrl = TextEditingController(text: (node.restTime ?? 90).toString());
     TextEditingController interRestCtrl = TextEditingController(text: node.interExerciseRest.toString());
 
+    // --- LOGIC: If parent is null, this is the Master Blueprint ---
     bool isRootBlueprint = parent == null;
 
     showDialog(context: context, builder: (ctx) => AlertDialog(
@@ -150,9 +153,10 @@ class _TreePageState extends State<TreePage> {
       content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
         TextField(controller: titleCtrl, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: "Identification Title")),
 
+        // --- ENFORCEMENT: Rest vars only visible/editable at the ROOT level ---
         if (isRootBlueprint) ...[
           const SizedBox(height: 25),
-          const Align(alignment: Alignment.centerLeft, child: Text("GLOBAL RECOVERY LOGIC (S):", style: TextStyle(color: Colors.white38, fontSize: 8, fontWeight: FontWeight.bold))),
+          const Align(alignment: Alignment.centerLeft, child: Text("GLOBAL RECOVERY CONFIG (S):", style: TextStyle(color: Colors.white38, fontSize: 8, fontWeight: FontWeight.bold))),
           const SizedBox(height: 10),
           Row(children: [
             Expanded(child: TextField(controller: setRestCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: "Set Rest"))),
@@ -169,9 +173,10 @@ class _TreePageState extends State<TreePage> {
           if (isRootBlueprint) {
             node.restTime = int.tryParse(setRestCtrl.text) ?? 90;
             node.interExerciseRest = int.tryParse(interRestCtrl.text) ?? 180;
+            node.isRoot = true; // Ensure flag is set
           } else {
-            node.restTime = null;
-            node.interExerciseRest = 180;
+            node.restTime = null; // Subfolders cannot hold rest values
+            node.isRoot = false; // Ensure flag is cleared
           }
 
           widget.service.savePlan(node);
@@ -236,9 +241,12 @@ class _TreePageState extends State<TreePage> {
             DropdownButton<CustomProtocol>(
               value: currentSelection,
               isExpanded: true,
-              hint: const Text("Select Protocol", style: TextStyle(color: Colors.white24, fontSize: 12)),
+              hint: Text(filteredProtocols.isEmpty ? "No valid scripts found" : "Select Protocol", style: const TextStyle(color: Colors.white24, fontSize: 12)),
               dropdownColor: const Color(0xFF111111),
-              items: filteredProtocols.map((p) => DropdownMenuItem<CustomProtocol>(value: p, child: Text(p.title, style: const TextStyle(color: Colors.cyanAccent, fontSize: 12)))).toList(),
+              items: filteredProtocols.map((p) => DropdownMenuItem<CustomProtocol>(
+                  value: p,
+                  child: Text(p.title, style: const TextStyle(color: Colors.cyanAccent, fontSize: 12))
+              )).toList(),
               onChanged: (val) => setDialogState(() => selectedProtocolId = val?.id),
             ),
             const Divider(height: 40),
@@ -272,7 +280,8 @@ class _TreePageState extends State<TreePage> {
       content: TextField(controller: ctrl, autofocus: true, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(hintText: "e.g. Arnold Split")),
       actions: [TextButton(onPressed: () {
         if(ctrl.text.isNotEmpty) {
-          final newNode = WorkoutNode(title: ctrl.text, typeIndex: NodeType.parent.index, restTime: 90, interExerciseRest: 180);
+          // --- MARK AS ROOT BLUEPRINT ---
+          final newNode = WorkoutNode(title: ctrl.text, typeIndex: NodeType.parent.index, isRoot: true, restTime: 90, interExerciseRest: 180);
           widget.service.savePlan(newNode);
           widget.onUpdate();
         }
@@ -326,7 +335,8 @@ class _TreePageState extends State<TreePage> {
       content: TextField(controller: ctrl, autofocus: true, style: const TextStyle(color: Colors.white)),
       actions: [TextButton(onPressed: () {
         if(ctrl.text.isNotEmpty) {
-          parent.children.add(WorkoutNode(title: ctrl.text, typeIndex: NodeType.parent.index));
+          // --- MARK AS SUB-FOLDER (Not a Root) ---
+          parent.children.add(WorkoutNode(title: ctrl.text, typeIndex: NodeType.parent.index, isRoot: false));
           widget.service.savePlan(parent);
           widget.onUpdate();
         }

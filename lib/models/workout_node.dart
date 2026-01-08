@@ -10,6 +10,9 @@ class WorkoutNode {
   int id = 0;
 
   late String title;
+
+  bool isRoot = false;
+
   int typeIndex = 0;
   int trackingIndex = 0;
 
@@ -18,13 +21,13 @@ class WorkoutNode {
   String? muscleGroup;
 
   final protocol = ToOne<CustomProtocol>();
-
   final children = ToMany<WorkoutNode>();
   final sets = ToMany<WorkoutSet>();
 
   WorkoutNode({
     this.id = 0,
     required this.title,
+    this.isRoot = false,
     this.typeIndex = 0,
     this.trackingIndex = 0,
     this.restTime,

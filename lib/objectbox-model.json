@@ -100,7 +100,7 @@
     },
     {
       "id": "3:2062288298101410463",
-      "lastPropertyId": "10:8884678089084243580",
+      "lastPropertyId": "11:4791266831731507737",
       "name": "WorkoutNode",
       "properties": [
         {
@@ -146,6 +146,11 @@
           "type": 11,
           "flags": 520,
           "relationTarget": "CustomProtocol"
+        },
+        {
+          "id": "11:4791266831731507737",
+          "name": "isRoot",
+          "type": 1
         }
       ],
       "relations": [

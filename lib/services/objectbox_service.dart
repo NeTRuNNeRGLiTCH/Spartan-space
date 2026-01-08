@@ -51,7 +51,10 @@ class ObjectBoxService {
   void savePlan(WorkoutNode plan) => planBox.put(plan);
 
   List<WorkoutNode> loadPlans() {
-    final query = planBox.query(WorkoutNode_.typeIndex.equals(NodeType.parent.index)).build();
+    final query = planBox.query(
+        WorkoutNode_.typeIndex.equals(NodeType.parent.index)
+            .and(WorkoutNode_.isRoot.equals(true))
+    ).build();
     return query.find();
   }
 

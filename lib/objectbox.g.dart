@@ -134,7 +134,7 @@ final _entities = <obx_int.ModelEntity>[
   obx_int.ModelEntity(
     id: const obx_int.IdUid(3, 2062288298101410463),
     name: 'WorkoutNode',
-    lastPropertyId: const obx_int.IdUid(10, 8884678089084243580),
+    lastPropertyId: const obx_int.IdUid(11, 4791266831731507737),
     flags: 0,
     properties: <obx_int.ModelProperty>[
       obx_int.ModelProperty(
@@ -186,6 +186,12 @@ final _entities = <obx_int.ModelEntity>[
         flags: 520,
         indexId: const obx_int.IdUid(1, 6851795456588437109),
         relationTarget: 'CustomProtocol',
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(11, 4791266831731507737),
+        name: 'isRoot',
+        type: 1,
+        flags: 0,
       ),
     ],
     relations: <obx_int.ModelRelation>[
@@ -482,7 +488,7 @@ obx_int.ModelDefinition getObjectBoxModel() {
         final muscleGroupOffset = object.muscleGroup == null
             ? null
             : fbb.writeString(object.muscleGroup!);
-        fbb.startTable(11);
+        fbb.startTable(12);
         fbb.addInt64(0, object.id);
         fbb.addOffset(1, titleOffset);
         fbb.addInt64(2, object.typeIndex);
@@ -491,6 +497,7 @@ obx_int.ModelDefinition getObjectBoxModel() {
         fbb.addInt64(5, object.interExerciseRest);
         fbb.addOffset(6, muscleGroupOffset);
         fbb.addInt64(9, object.protocol.targetId);
+        fbb.addBool(10, object.isRoot);
         fbb.finish(fbb.endTable());
         return object.id;
       },
@@ -506,6 +513,12 @@ obx_int.ModelDefinition getObjectBoxModel() {
         final titleParam = const fb.StringReader(
           asciiOptimization: true,
         ).vTableGet(buffer, rootOffset, 6, '');
+        final isRootParam = const fb.BoolReader().vTableGet(
+          buffer,
+          rootOffset,
+          24,
+          false,
+        );
         final typeIndexParam = const fb.Int64Reader().vTableGet(
           buffer,
           rootOffset,
@@ -535,6 +548,7 @@ obx_int.ModelDefinition getObjectBoxModel() {
         final object = WorkoutNode(
           id: idParam,
           title: titleParam,
+          isRoot: isRootParam,
           typeIndex: typeIndexParam,
           trackingIndex: trackingIndexParam,
           restTime: restTimeParam,
@@ -791,6 +805,11 @@ class WorkoutNode_ {
   /// See [WorkoutNode.protocol].
   static final protocol = obx.QueryRelationToOne<WorkoutNode, CustomProtocol>(
     _entities[2].properties[7],
+  );
+
+  /// See [WorkoutNode.isRoot].
+  static final isRoot = obx.QueryBooleanProperty<WorkoutNode>(
+    _entities[2].properties[8],
   );
 
   /// see [WorkoutNode.children]
