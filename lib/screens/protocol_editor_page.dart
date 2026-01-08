@@ -17,6 +17,7 @@ class ProtocolEditorPage extends StatefulWidget {
 class _ProtocolEditorPageState extends State<ProtocolEditorPage> {
   List<CustomProtocol> _protocols = [];
 
+  // --- IDE CONFIGURATION ---
   List<String> _activeTokens = ["WHEN", "DO", "STORE"];
   final List<String> _tokenPool = [
     "WHEN", "DO", "OTHERWISE", "STORE", "AS", "CALL", "of", "all", "AND",
@@ -104,14 +105,19 @@ class _ProtocolEditorPageState extends State<ProtocolEditorPage> {
 
   void _openScriptEditor(CustomProtocol? existing) {
     ProtocolScope selectedScope = existing?.scope ?? ProtocolScope.power;
+    final List<String> allTitles = _protocols.map((p) => p.title).toList();
 
+    // CUSTOM CONTROLLER: Optimized for V4.6 Self-Awareness
     final scriptCtrl = TitanSyntaxController(
       text: existing?.script ?? "",
       scope: selectedScope,
+      existingProtocolTitles: allTitles,
     );
 
     final titleCtrl = TextEditingController(text: existing?.title ?? "NEW_SCRIPT");
-    List<String> currentErrors = TitanEngine.validate(scriptCtrl.text, selectedScope);
+
+    // Initial validation
+    List<String> currentErrors = TitanEngine.validate(scriptCtrl.text, selectedScope, allTitles);
 
     showModalBottomSheet(
       context: context,
@@ -124,6 +130,7 @@ class _ProtocolEditorPageState extends State<ProtocolEditorPage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              // 1. TOKEN BAR
               Row(
                 children: [
                   ..._activeTokens.map((t) => Expanded(
@@ -143,7 +150,7 @@ class _ProtocolEditorPageState extends State<ProtocolEditorPage> {
                               text: newText,
                               selection: TextSelection.collapsed(offset: selection.start + t.length + 1)
                           );
-                          setModalState(() { currentErrors = TitanEngine.validate(scriptCtrl.text, selectedScope); });
+                          setModalState(() { currentErrors = TitanEngine.validate(scriptCtrl.text, selectedScope, allTitles); });
                         },
                         child: Text(t, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
                       ),
@@ -157,6 +164,7 @@ class _ProtocolEditorPageState extends State<ProtocolEditorPage> {
               ),
               const SizedBox(height: 15),
 
+              // 2. METADATA
               Row(children: [
                 Expanded(child: DropdownButton<ProtocolScope>(
                   value: selectedScope,
@@ -167,7 +175,7 @@ class _ProtocolEditorPageState extends State<ProtocolEditorPage> {
                     setModalState(() {
                       selectedScope = val!;
                       scriptCtrl.scope = val;
-                      currentErrors = TitanEngine.validate(scriptCtrl.text, val);
+                      currentErrors = TitanEngine.validate(scriptCtrl.text, val, allTitles);
                     });
                   },
                 )),
@@ -180,6 +188,7 @@ class _ProtocolEditorPageState extends State<ProtocolEditorPage> {
               ]),
               const SizedBox(height: 15),
 
+              // 3. EDITOR
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(15), border: Border.all(color: Colors.white.withOpacity(0.05))),
@@ -187,12 +196,13 @@ class _ProtocolEditorPageState extends State<ProtocolEditorPage> {
                   controller: scriptCtrl,
                   maxLines: 6,
                   style: const TextStyle(fontFamily: 'monospace', fontSize: 13, height: 1.5),
-                  onChanged: (v) => setModalState(() { currentErrors = TitanEngine.validate(v, selectedScope); }),
-                  decoration: const InputDecoration(border: InputBorder.none, hintText: "// Write your logic..."),
+                  onChanged: (v) => setModalState(() { currentErrors = TitanEngine.validate(v, selectedScope, allTitles); }),
+                  decoration: const InputDecoration(border: InputBorder.none, hintText: "// Write Logic..."),
                 ),
               ),
               const SizedBox(height: 10),
 
+              // 4. CONSOLE
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(12),
@@ -214,15 +224,11 @@ class _ProtocolEditorPageState extends State<ProtocolEditorPage> {
                 ),
                 onPressed: currentErrors.isNotEmpty ? null : () {
                   final p = existing ?? CustomProtocol(title: titleCtrl.text, script: scriptCtrl.text);
-                  p.title = titleCtrl.text;
-                  p.script = scriptCtrl.text;
-                  p.scope = selectedScope;
+                  p.title = titleCtrl.text; p.script = scriptCtrl.text; p.scope = selectedScope;
                   widget.service.saveProtocol(p);
-                  _load();
-                  widget.onUpdate();
-                  Navigator.pop(ctx);
+                  _load(); widget.onUpdate(); Navigator.pop(ctx);
                 },
-                child: Text(currentErrors.isNotEmpty ? "FIX LOGIC LEAKS" : "ENGRAVE TO CORE",
+                child: Text(currentErrors.isNotEmpty ? "FIX LOGIC ERRORS" : "ENGRAVE TO CORE",
                     style: TextStyle(color: currentErrors.isNotEmpty ? Colors.white24 : Colors.black, fontWeight: FontWeight.w900)),
               ),
               const SizedBox(height: 30),
@@ -273,9 +279,15 @@ class _ProtocolEditorPageState extends State<ProtocolEditorPage> {
   }
 }
 
+// ---------------------------------------------------------------------------
+// TITAN SYNTAX CONTROLLER (With Discovery Logic)
+// ---------------------------------------------------------------------------
+
 class TitanSyntaxController extends TextEditingController {
   ProtocolScope scope;
-  TitanSyntaxController({super.text, required this.scope});
+  List<String> existingProtocolTitles;
+
+  TitanSyntaxController({super.text, required this.scope, required this.existingProtocolTitles});
 
   @override
   TextSpan buildTextSpan({required BuildContext context, TextStyle? style, required bool withComposing}) {
@@ -287,6 +299,13 @@ class TitanSyntaxController extends TextEditingController {
       "WHEN", "DO", "OTHERWISE", "STORE", "AS", "CALL", "OF", "ALL",
       "SET", "THIS", "WEIGHT", "REPS", "SECONDS", "DISTANCE", "END", "REPEAT", "AND"
     };
+
+    // LOCAL VAR DISCOVERY: Find custom variables in the current text
+    final currentLocalVars = <String>{};
+    final asMatches = RegExp(r'AS\s+([A-Z0-9_]+)', caseSensitive: false).allMatches(text);
+    for (var m in asMatches) { if (m.group(1) != null) currentLocalVars.add(m.group(1)!.toUpperCase()); }
+
+    final protocolSet = existingProtocolTitles.map((e) => e.toUpperCase()).toSet();
 
     for (final match in matches) {
       final word = match.group(0)!;
@@ -300,8 +319,12 @@ class TitanSyntaxController extends TextEditingController {
         wordStyle = const TextStyle(color: Colors.greenAccent);
       } else if (upperWord.startsWith("SET") || upperWord == "ALL") {
         wordStyle = const TextStyle(color: Colors.orangeAccent);
-      } else if (word.trim().isNotEmpty && !["+", "-", "*", "/", ">", "=", "."].contains(word.trim())) {
-        if (TitanEngine.validate("$word .", scope).isNotEmpty) {
+      } else if (currentLocalVars.contains(upperWord) || protocolSet.contains(upperWord)) {
+        // Feature: Custom variables and Protocol titles are recognized and colored Cyan
+        wordStyle = const TextStyle(color: Colors.cyanAccent);
+      } else if (word.trim().isNotEmpty && !["+", "-", "*", "/", ">", "<", "=", "."].contains(word.trim())) {
+        // Use TitanEngine logic to check for errors
+        if (TitanEngine.validate("$word .", scope, existingProtocolTitles).isNotEmpty) {
           wordStyle = const TextStyle(color: Colors.redAccent, decoration: TextDecoration.underline, decorationColor: Colors.redAccent);
         }
       }

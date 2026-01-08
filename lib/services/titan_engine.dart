@@ -2,64 +2,68 @@ import '../models/workout_node.dart';
 import '../models/custom_protocol.dart';
 import '../objectbox.g.dart';
 
-/// TITAN_ENGINE_OS V1.0
-/// High-Performance Biometric Logic Interpreter
 class TitanEngine {
   static final Map<String, double> _tempVars = {};
 
   // ---------------------------------------------------------------------------
-  // 1. THE COMPILER
+  // 1. THE VALIDATOR (With Variable & Protocol Discovery)
   // ---------------------------------------------------------------------------
 
-  /// Scans the script for syntax errors, typos, and scope violations.
-  /// Returns a list of readable error strings.
-  static List<String> validate(String script, ProtocolScope scope) {
+  static List<String> validate(String script, ProtocolScope scope, List<String> existingTitles) {
     List<String> errors = [];
     String s = script.toUpperCase().trim();
 
     if (s.isEmpty) return [];
 
-    // RULE: Every logic stream must end with a period.
+    // Feature: Terminator Check
     if (!s.endsWith(".")) {
-      errors.add("TERMINATION_ERROR: Logic stream must end with a space and a period [ . ]");
+      errors.add("TERMINATION_ERROR: Logic must end with a space and a period [ . ]");
     }
 
-    // RULE: Decimal protection - ensures user didn't write "5." instead of "5 . "
-    final decimalCheck = RegExp(r'\d\.$');
-    if (decimalCheck.hasMatch(s)) {
-      errors.add("SYNTAX_ERROR: Ambiguous terminator. Ensure a space exists between numbers and the period.");
-    }
-
-    // RULE: Scope-Locking Variables
+    // Feature: Scope Guard
     if (scope == ProtocolScope.kinetic && s.contains("WEIGHT")) {
-      errors.add("SCOPE_ERROR: 'Weight' is unauthorized in CALISTHENICS scope.");
+      errors.add("SCOPE_ERROR: 'Weight' is unauthorized in KINETIC scope.");
     }
     if (scope == ProtocolScope.chronos && (s.contains("WEIGHT") || s.contains("REPS"))) {
-      errors.add("SCOPE_ERROR: Only 'Seconds' allowed in PLANK/HOLDS scope.");
+      errors.add("SCOPE_ERROR: Only 'Seconds' allowed in CHRONOS scope.");
     }
     if (scope == ProtocolScope.velocity && (s.contains("WEIGHT") || s.contains("REPS"))) {
-      errors.add("SCOPE_ERROR: Only 'Distance' allowed in RUNNING/VELOCITY scope.");
+      errors.add("SCOPE_ERROR: Only 'Distance' allowed in VELOCITY scope.");
     }
 
-    // RULE: Lexer Typo Detection
+    // --- FEATURE: IDENTIFIER DISCOVERY ---
+    // We scan the script to find variable names being declared: STORE 4 AS [NAME]
+    final userDeclaredVars = <String>{};
+    final asMatches = RegExp(r'AS\s+([A-Z0-9_]+)').allMatches(s);
+    for (var match in asMatches) {
+      if (match.group(1) != null) userDeclaredVars.add(match.group(1)!);
+    }
+
+    // Normalize existing protocol titles for comparison
+    final protocolNames = existingTitles.map((t) => t.toUpperCase()).toSet();
+
+    // --- LEXER SCAN ---
     final tokens = s.split(RegExp(r'[\s.()=+-<>*\/]+')).where((t) => t.isNotEmpty);
-    final validKeywords = {
+    final systemKeywords = {
       "WHEN", "DO", "OTHERWISE", "STORE", "AS", "CALL", "OF", "ALL",
       "SET", "THIS", "WEIGHT", "REPS", "SECONDS", "DISTANCE", "END", "REPEAT", "AND"
     };
 
     for (var token in tokens) {
-      if (double.tryParse(token) != null) continue;
-      if (token.startsWith("SET") && token.length > 3) continue;
+      if (double.tryParse(token) != null) continue; // It's a number
+      if (token.startsWith("SET") && token.length > 3) continue; // It's set1, set2...
       if (token == "SET(THIS)") continue;
 
-      if (!validKeywords.contains(token) && !_tempVars.containsKey(token)) {
+      // VALIDATION: Word must be a System Keyword, a User Variable, or a Protocol Name
+      bool isValid = systemKeywords.contains(token) ||
+          userDeclaredVars.contains(token) ||
+          protocolNames.contains(token);
+
+      if (!isValid) {
         if (token == "SIT" || token == "SAT" || token == "SIT1") {
           errors.add("LEXER_ERROR: Found '$token'. Did you mean 'SET'?");
-        } else if (token == "WIEGHT" || token == "WIGHT") {
-          errors.add("LEXER_ERROR: Found '$token'. Did you mean 'WEIGHT'?");
         } else {
-          errors.add("LEXER_ERROR: Unknown identifier '$token'. check Codex for valid variables.");
+          errors.add("LEXER_ERROR: Unknown identifier '$token'. Declare variables using STORE ... AS.");
         }
       }
     }
@@ -71,7 +75,6 @@ class TitanEngine {
   // 2. THE EXECUTION ENGINE
   // ---------------------------------------------------------------------------
 
-  /// Interprets the TitanScript and returns a modified list of WorkoutSets.
   static List<WorkoutSet> execute({
     required CustomProtocol protocol,
     required List<WorkoutSet> actualPerformance,
@@ -79,55 +82,54 @@ class TitanEngine {
   }) {
     _tempVars.clear();
     String script = protocol.script.toUpperCase();
-
-    List<WorkoutSet> results = actualPerformance.map((s) =>
-        WorkoutSet(value: s.value, weight: s.weight)).toList();
+    List<WorkoutSet> results = actualPerformance.map((s) => WorkoutSet(value: s.value, weight: s.weight)).toList();
 
     try {
-      script = script.replaceAll(RegExp(r'(?<=\d)\.(?=\d)'), "___PROTECTED_DECIMAL___");
-
+      script = script.replaceAll(RegExp(r'(?<=\d)\.(?=\d)'), "___DECIMAL___");
       List<String> sentences = script.split('.').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
 
       for (var sentence in sentences) {
-        String instruction = sentence.replaceAll("___PROTECTED_DECIMAL___", ".");
+        String instruction = sentence.replaceAll("___DECIMAL___", ".");
 
-        // --- PHASE: REPEAT LOOP ---
+        // Feature: REPEAT Loop
         if (instruction.contains("REPEAT")) {
-          final loopHeader = instruction.split("DO")[0].replaceAll("REPEAT", "").trim();
-          final loopBody = instruction.split("DO")[1].trim();
-          int iterations = int.tryParse(loopHeader) ?? 1;
+          final parts = instruction.split("DO");
+          final countStr = parts[0].replaceAll("REPEAT", "").trim();
+          final loopBody = parts[1].trim();
+          int iterations = int.tryParse(countStr) ?? 1;
 
           for (int i = 1; i <= iterations; i++) {
-            String iterativeLogic = loopBody.replaceAll("SET(THIS)", "SET$i");
-
-            List<String> actions = iterativeLogic.split("AND").map((a) => a.trim()).toList();
-            for (var action in actions) {
+            // Feature: set(this) substitution
+            String iterationLogic = loopBody.replaceAll("SET(THIS)", "SET$i");
+            // Feature: AND multi-action support
+            List<String> subActions = iterationLogic.split("AND").map((a) => a.trim()).toList();
+            for (var action in subActions) {
               results = _parseInstruction(action, results, protocol.scope, protocolBox);
             }
           }
         }
-        // --- PHASE: STORE DATA ---
+        // Feature: STORE logic
         else if (instruction.contains("STORE")) {
           _handleStorage(instruction, results, protocol.scope);
         }
-        // --- PHASE: STANDARD INSTRUCTION ---
+        // Standard logic
         else {
           results = _parseInstruction(instruction, results, protocol.scope, protocolBox);
         }
       }
     } catch (e) {
-      print("TITAN_ENGINE_TERMINATED_ABNORMALLY: $e");
+      print("TITAN_ENGINE_FATAL: $e");
       return actualPerformance;
     }
     return results;
   }
 
   // ---------------------------------------------------------------------------
-  // 3. INTERNAL PARSER LOGIC
+  // 3. INTERNAL PARSER
   // ---------------------------------------------------------------------------
 
   static List<WorkoutSet> _parseInstruction(String s, List<WorkoutSet> currentSets, ProtocolScope scope, Box<CustomProtocol> box) {
-    // RECURSION: Function Inter-Calling
+    // Feature: Recursive CALL
     if (s.contains("CALL")) {
       final targetName = s.split("CALL")[1].trim();
       final target = box.query(CustomProtocol_.title.equals(targetName)).build().findFirst();
@@ -137,14 +139,14 @@ class TitanEngine {
       return currentSets;
     }
 
-    // CONDITIONALS: WHEN ... DO ... OTHERWISE
+    // Feature: WHEN Conditionals
     if (s.contains("WHEN")) {
-      final condition = s.split("DO")[0].replaceAll("WHEN", "").trim();
+      final condPart = s.split("DO")[0].replaceAll("WHEN", "").trim();
       final actionPart = s.split("DO")[1].trim();
       final truePath = actionPart.split("OTHERWISE")[0].trim();
       final falsePath = actionPart.contains("OTHERWISE") ? actionPart.split("OTHERWISE")[1].trim() : "";
 
-      if (_evaluateCondition(condition, currentSets, scope)) {
+      if (_evaluateCondition(condPart, currentSets, scope)) {
         return _applyAction(truePath, currentSets, scope);
       } else if (falsePath.isNotEmpty) {
         return _applyAction(falsePath, currentSets, scope);
@@ -152,21 +154,18 @@ class TitanEngine {
       return currentSets;
     }
 
-    // RETURN GATES: END
+    // Feature: END return gate
     if (s.contains("END")) {
-      final val = s.split("END")[1].trim();
-      return _applyAction(val, currentSets, scope);
+      return _applyAction(s.split("END")[1].trim(), currentSets, scope);
     }
 
-    // DIRECT ASSIGNMENT
     return _applyAction(s, currentSets, scope);
   }
 
   static bool _evaluateCondition(String cond, List<WorkoutSet> sets, ProtocolScope scope) {
-    final operators = RegExp(r'[><=]');
-    final parts = cond.split(operators);
+    final ops = RegExp(r'[><=]');
+    final parts = cond.split(ops);
     double leftVal = _resolveValue(parts[0], sets, scope);
-
     String rightSide = parts.last.trim();
     double rightVal = _tempVars[rightSide] ?? (double.tryParse(RegExp(r'\d+\.?\d*').stringMatch(rightSide) ?? "0") ?? 0);
 
@@ -180,28 +179,26 @@ class TitanEngine {
 
   static List<WorkoutSet> _applyAction(String action, List<WorkoutSet> sets, ProtocolScope scope) {
     bool targetAll = action.contains("OF ALL") || (!action.contains("OF SET"));
-    int? specificSetIdx;
+    int? specificIdx;
     if (action.contains("OF SET")) {
-      specificSetIdx = (int.tryParse(RegExp(r'\d+').stringMatch(action.split("OF SET")[1]) ?? "") ?? 1) - 1;
+      specificIdx = (int.tryParse(RegExp(r'\d+').stringMatch(action.split("OF SET")[1]) ?? "") ?? 1) - 1;
     }
 
     for (int i = 0; i < sets.length; i++) {
-      if (targetAll || (specificSetIdx != null && specificSetIdx == i)) {
-        String deltaStr = action.split(RegExp(r'[+\-*/=]')).last.trim();
-        double delta = _tempVars[deltaStr] ?? (double.tryParse(RegExp(r'\d+\.?\d*').stringMatch(deltaStr) ?? "0") ?? 0);
+      if (targetAll || (specificIdx != null && specificIdx == i)) {
+        String operandStr = action.split(RegExp(r'[+\-*/=]')).last.trim();
+        double operand = _tempVars[operandStr] ?? (double.tryParse(RegExp(r'\d+\.?\d*').stringMatch(operandStr) ?? "0") ?? 0);
 
         if (action.contains("WEIGHT")) {
-          if (action.contains("+")) sets[i].weight += delta;
-          else if (action.contains("-")) sets[i].weight -= delta;
-          else if (action.contains("*")) sets[i].weight *= delta;
-          else if (action.contains("/")) sets[i].weight /= delta;
-          else sets[i].weight = delta;
+          if (action.contains("+")) sets[i].weight += operand;
+          else if (action.contains("-")) sets[i].weight -= operand;
+          else if (action.contains("*")) sets[i].weight *= operand;
+          else sets[i].weight = operand;
         }
-        else if (action.contains("REPS") || action.contains("SECONDS") || action.contains("DISTANCE")) {
-          double current = sets[i].value.toDouble();
-          if (action.contains("+")) sets[i].value = (current + delta).toInt();
-          else if (action.contains("-")) sets[i].value = (current - delta).toInt();
-          else sets[i].value = delta.toInt();
+        if (action.contains("REPS") || action.contains("SECONDS") || action.contains("DISTANCE")) {
+          if (action.contains("+")) sets[i].value += operand.toInt();
+          else if (action.contains("-")) sets[i].value -= operand.toInt();
+          else sets[i].value = operand.toInt();
         }
       }
     }
@@ -211,24 +208,18 @@ class TitanEngine {
   static void _handleStorage(String s, List<WorkoutSet> sets, ProtocolScope scope) {
     final parts = s.split("AS");
     if (parts.length < 2) return;
-
-    final dataKey = parts[0].replaceAll("STORE", "").trim();
-    final varName = parts[1].trim();
-    _tempVars[varName] = _resolveValue(dataKey, sets, scope);
+    _tempVars[parts[1].trim()] = _resolveValue(parts[0].replaceAll("STORE", "").trim(), sets, scope);
   }
 
   static double _resolveValue(String part, List<WorkoutSet> sets, ProtocolScope scope) {
     if (_tempVars.containsKey(part.trim())) return _tempVars[part.trim()]!;
-
     int idx = 0;
     if (part.contains("SET")) {
       idx = (int.tryParse(RegExp(r'\d+').stringMatch(part.split("SET")[1]) ?? "") ?? 1) - 1;
     }
     if (idx < 0 || idx >= sets.length) idx = 0;
-
     if (part.contains("WEIGHT")) return sets[idx].weight;
     if (part.contains("REPS") || part.contains("SECONDS") || part.contains("DISTANCE")) return sets[idx].value.toDouble();
-
     return double.tryParse(RegExp(r'\d+\.?\d*').stringMatch(part) ?? "0") ?? 0;
   }
 }

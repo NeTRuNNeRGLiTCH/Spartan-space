@@ -40,13 +40,9 @@ class ObjectBoxService {
       protocolBox.put(CustomProtocol(
         title: "LINEAR OVERLOAD V1",
         script: """
-// TitanScript Linear Progression
-if (PowerAsset.reps >= 12) {
-    weight = PowerAsset.weight + 2.5;
-} else {
-    weight = PowerAsset.weight;
-}
-        """,
+                STORE Weight of set1 AS current_load . 
+                WHEN Reps of set1 >= 12 DO Weight of all + 2.5 OTHERWISE Weight of all = current_load . 
+                """,
       ));
     }
   }
