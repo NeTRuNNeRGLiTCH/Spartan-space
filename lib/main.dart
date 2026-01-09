@@ -80,7 +80,6 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
     final Map<String, List<LibraryExercise>> fullMap = LibraryService.getFullLibrary();
 
     final userAddedExercises = widget.service.loadUserLibrary();
-
     for (var ex in userAddedExercises) {
       if (ex.muscleGroup != null && fullMap.containsKey(ex.muscleGroup)) {
         fullMap[ex.muscleGroup]!.add(ex);

@@ -82,7 +82,7 @@ class _SessionCompletePageState extends State<SessionCompletePage> {
               autofocus: true,
               style: const TextStyle(color: Colors.white),
               decoration: InputDecoration(
-                labelText: ex.trackingType == TrackingType.time ? "Actual Seconds" : "Actual Reps",
+                labelText: ex.trackingType == TrackingType.time ? "Actual Seconds" : "Actual Units",
                 labelStyle: const TextStyle(color: Colors.white54, fontSize: 10),
                 focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.cyanAccent)),
               ),

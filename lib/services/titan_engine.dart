@@ -6,21 +6,26 @@ class TitanEngine {
   static final Map<String, double> _tempVars = {};
 
   // ---------------------------------------------------------------------------
-  // 1. THE VALIDATOR (With Variable & Protocol Discovery)
+  // 1. THE VALIDATOR (Self-Aware & Nesting-Safe)
   // ---------------------------------------------------------------------------
-
   static List<String> validate(String script, ProtocolScope scope, List<String> existingTitles) {
     List<String> errors = [];
     String s = script.toUpperCase().trim();
 
     if (s.isEmpty) return [];
 
-    // Feature: Terminator Check
     if (!s.endsWith(".")) {
-      errors.add("TERMINATION_ERROR: Logic must end with a space and a period [ . ]");
+      errors.add("TERMINATION_ERROR: Logic stream must end with a period [ . ]");
     }
 
-    // Feature: Scope Guard
+    // Feature: Nesting Depth Check (Counting DO vs .)
+    int doCount = RegExp(r'\bDO\b').allMatches(s).length;
+    int terminatorCount = RegExp(r'(?<!\d)\.(?!\d)').allMatches(s).length;
+    if (doCount > terminatorCount) {
+      errors.add("NESTING_ERROR: Unclosed logic gate. Missing [ . ]");
+    }
+
+    // Feature: Scope Guarding
     if (scope == ProtocolScope.kinetic && s.contains("WEIGHT")) {
       errors.add("SCOPE_ERROR: 'Weight' is unauthorized in KINETIC scope.");
     }
@@ -28,53 +33,44 @@ class TitanEngine {
       errors.add("SCOPE_ERROR: Only 'Seconds' allowed in CHRONOS scope.");
     }
     if (scope == ProtocolScope.velocity && (s.contains("WEIGHT") || s.contains("REPS"))) {
-      errors.add("SCOPE_ERROR: Only 'Distance' allowed in VELOCITY scope.");
+      errors.add("SCOPE_ERROR: Only 'Distance' allowed in RUNNING scope.");
     }
 
-    // --- FEATURE: IDENTIFIER DISCOVERY ---
-    // We scan the script to find variable names being declared: STORE 4 AS [NAME]
     final userDeclaredVars = <String>{};
     final asMatches = RegExp(r'AS\s+([A-Z0-9_]+)').allMatches(s);
     for (var match in asMatches) {
       if (match.group(1) != null) userDeclaredVars.add(match.group(1)!);
     }
-
-    // Normalize existing protocol titles for comparison
     final protocolNames = existingTitles.map((t) => t.toUpperCase()).toSet();
 
-    // --- LEXER SCAN ---
-    final tokens = s.split(RegExp(r'[\s.()=+-<>*\/]+')).where((t) => t.isNotEmpty);
+    // Lexer Scan
+    final tokens = s.split(RegExp(r'[\s()=+-<>*\/]+')).where((t) => t.isNotEmpty);
     final systemKeywords = {
       "WHEN", "DO", "OTHERWISE", "STORE", "AS", "CALL", "OF", "ALL",
-      "SET", "THIS", "WEIGHT", "REPS", "SECONDS", "DISTANCE", "END", "REPEAT", "AND"
+      "SET", "THIS", "WEIGHT", "REPS", "SECONDS", "DISTANCE", "END", "REPEAT", "AND", "=?"
     };
 
     for (var token in tokens) {
-      if (double.tryParse(token) != null) continue; // It's a number
-      if (token.startsWith("SET") && token.length > 3) continue; // It's set1, set2...
+      if (token == ".") continue;
+      if (double.tryParse(token) != null) continue;
+      if (token.startsWith("SET") && token.length > 3) continue;
       if (token == "SET(THIS)") continue;
+      if (token == "=?") continue;
 
-      // VALIDATION: Word must be a System Keyword, a User Variable, or a Protocol Name
       bool isValid = systemKeywords.contains(token) ||
           userDeclaredVars.contains(token) ||
           protocolNames.contains(token);
 
       if (!isValid) {
-        if (token == "SIT" || token == "SAT" || token == "SIT1") {
-          errors.add("LEXER_ERROR: Found '$token'. Did you mean 'SET'?");
-        } else {
-          errors.add("LEXER_ERROR: Unknown identifier '$token'. Declare variables using STORE ... AS.");
-        }
+        errors.add("LEXER_ERROR: Unknown identifier '$token'.");
       }
     }
-
     return errors;
   }
 
   // ---------------------------------------------------------------------------
-  // 2. THE EXECUTION ENGINE
+  // 2. THE EXECUTION ENGINE (Recursive & Depth-Aware)
   // ---------------------------------------------------------------------------
-
   static List<WorkoutSet> execute({
     required CustomProtocol protocol,
     required List<WorkoutSet> actualPerformance,
@@ -86,36 +82,12 @@ class TitanEngine {
 
     try {
       script = script.replaceAll(RegExp(r'(?<=\d)\.(?=\d)'), "___DECIMAL___");
-      List<String> sentences = script.split('.').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
 
-      for (var sentence in sentences) {
-        String instruction = sentence.replaceAll("___DECIMAL___", ".");
+      List<String> instructions = _splitIntoTopLevelInstructions(script);
 
-        // Feature: REPEAT Loop
-        if (instruction.contains("REPEAT")) {
-          final parts = instruction.split("DO");
-          final countStr = parts[0].replaceAll("REPEAT", "").trim();
-          final loopBody = parts[1].trim();
-          int iterations = int.tryParse(countStr) ?? 1;
-
-          for (int i = 1; i <= iterations; i++) {
-            // Feature: set(this) substitution
-            String iterationLogic = loopBody.replaceAll("SET(THIS)", "SET$i");
-            // Feature: AND multi-action support
-            List<String> subActions = iterationLogic.split("AND").map((a) => a.trim()).toList();
-            for (var action in subActions) {
-              results = _parseInstruction(action, results, protocol.scope, protocolBox);
-            }
-          }
-        }
-        // Feature: STORE logic
-        else if (instruction.contains("STORE")) {
-          _handleStorage(instruction, results, protocol.scope);
-        }
-        // Standard logic
-        else {
-          results = _parseInstruction(instruction, results, protocol.scope, protocolBox);
-        }
+      for (var instr in instructions) {
+        String cleanInstr = instr.replaceAll("___DECIMAL___", ".");
+        results = _processLogic(cleanInstr, results, protocol.scope, protocolBox);
       }
     } catch (e) {
       print("TITAN_ENGINE_FATAL: $e");
@@ -124,46 +96,78 @@ class TitanEngine {
     return results;
   }
 
-  // ---------------------------------------------------------------------------
-  // 3. INTERNAL PARSER
-  // ---------------------------------------------------------------------------
+  static List<String> _splitIntoTopLevelInstructions(String script) {
+    List<String> parts = script.split(RegExp(r'\s+'));
+    List<String> instructions = [];
+    List<String> current = [];
+    int depth = 0;
 
-  static List<WorkoutSet> _parseInstruction(String s, List<WorkoutSet> currentSets, ProtocolScope scope, Box<CustomProtocol> box) {
-    // Feature: Recursive CALL
-    if (s.contains("CALL")) {
-      final targetName = s.split("CALL")[1].trim();
-      final target = box.query(CustomProtocol_.title.equals(targetName)).build().findFirst();
-      if (target != null && target.scopeIndex == scope.index) {
-        return execute(protocol: target, actualPerformance: currentSets, protocolBox: box);
+    for (var word in parts) {
+      current.add(word);
+      if (word == "DO") depth++;
+      if (word == ".") {
+        if (depth > 0) {
+          depth--;
+        } else {
+          instructions.add(current.join(" "));
+          current = [];
+        }
+      }
+    }
+    if (current.isNotEmpty) instructions.add(current.join(" "));
+    return instructions;
+  }
+
+  static List<WorkoutSet> _processLogic(String s, List<WorkoutSet> currentSets, ProtocolScope scope, Box<CustomProtocol> box) {
+    s = s.trim();
+    if (s.isEmpty) return currentSets;
+
+    if (s.startsWith("STORE")) {
+      final parts = s.split("AS");
+      _tempVars[parts[1].replaceAll(".", "").trim()] = _resolveValue(parts[0].replaceAll("STORE", "").trim(), currentSets, scope);
+      return currentSets;
+    }
+
+    if (s.contains("REPEAT")) {
+      final loopParts = s.split("DO");
+      final countPart = loopParts[0].replaceAll("REPEAT", "").trim();
+      final bodyPart = s.substring(s.indexOf("DO") + 2, s.lastIndexOf(".")).trim();
+
+      int iterations = int.tryParse(countPart) ?? 1;
+      for (int i = 1; i <= iterations; i++) {
+        String iterationLogic = bodyPart.replaceAll("SET(THIS)", "SET$i");
+        List<String> actions = iterationLogic.split("AND").map((a) => a.trim()).toList();
+        for (var action in actions) {
+          currentSets = _processLogic(action, currentSets, scope, box);
+        }
       }
       return currentSets;
     }
 
-    // Feature: WHEN Conditionals
-    if (s.contains("WHEN")) {
+    if (s.startsWith("WHEN")) {
       final condPart = s.split("DO")[0].replaceAll("WHEN", "").trim();
-      final actionPart = s.split("DO")[1].trim();
-      final truePath = actionPart.split("OTHERWISE")[0].trim();
-      final falsePath = actionPart.contains("OTHERWISE") ? actionPart.split("OTHERWISE")[1].trim() : "";
+      final bodyPart = s.substring(s.indexOf("DO") + 2, s.lastIndexOf(".")).trim();
+      final truePath = bodyPart.split("OTHERWISE")[0].trim();
+      final falsePath = bodyPart.contains("OTHERWISE") ? bodyPart.split("OTHERWISE")[1].trim() : "";
 
       if (_evaluateCondition(condPart, currentSets, scope)) {
-        return _applyAction(truePath, currentSets, scope);
+        return _processLogic(truePath, currentSets, scope, box);
       } else if (falsePath.isNotEmpty) {
-        return _applyAction(falsePath, currentSets, scope);
+        return _processLogic(falsePath, currentSets, scope, box);
       }
       return currentSets;
     }
 
-    // Feature: END return gate
-    if (s.contains("END")) {
-      return _applyAction(s.split("END")[1].trim(), currentSets, scope);
+    if (s.contains("CALL")) {
+      final target = box.query(CustomProtocol_.title.equals(s.split("CALL")[1].replaceAll(".", "").trim())).build().findFirst();
+      return (target != null && target.scopeIndex == scope.index) ? execute(protocol: target, actualPerformance: currentSets, protocolBox: box) : currentSets;
     }
 
     return _applyAction(s, currentSets, scope);
   }
 
   static bool _evaluateCondition(String cond, List<WorkoutSet> sets, ProtocolScope scope) {
-    final ops = RegExp(r'[><=]');
+    final ops = RegExp(r'[><=]+');
     final parts = cond.split(ops);
     double leftVal = _resolveValue(parts[0], sets, scope);
     String rightSide = parts.last.trim();
@@ -173,11 +177,25 @@ class TitanEngine {
     if (cond.contains("<=")) return leftVal <= rightVal;
     if (cond.contains(">")) return leftVal > rightVal;
     if (cond.contains("<")) return leftVal < rightVal;
-    if (cond.contains("=")) return leftVal == rightVal;
+    if (cond.contains("=?") || cond.contains("=")) return leftVal == rightVal;
     return false;
   }
 
   static List<WorkoutSet> _applyAction(String action, List<WorkoutSet> sets, ProtocolScope scope) {
+    String operandStr = action.split(RegExp(r'[+\-*/=]')).last.trim();
+    double operand = _tempVars[operandStr] ?? (double.tryParse(RegExp(r'\d+\.?\d*').stringMatch(operandStr) ?? "0") ?? 0);
+
+    if (!action.contains("WEIGHT") && !action.contains("REPS") && !action.contains("SECONDS") && !action.contains("DISTANCE")) {
+      final varName = action.split(RegExp(r'[+\-*/=]'))[0].trim();
+      if (_tempVars.containsKey(varName)) {
+        if (action.contains("+")) _tempVars[varName] = _tempVars[varName]! + operand;
+        else if (action.contains("-")) _tempVars[varName] = _tempVars[varName]! - operand;
+        else if (action.contains("*")) _tempVars[varName] = _tempVars[varName]! * operand;
+        else _tempVars[varName] = operand;
+      }
+      return sets;
+    }
+
     bool targetAll = action.contains("OF ALL") || (!action.contains("OF SET"));
     int? specificIdx;
     if (action.contains("OF SET")) {
@@ -186,16 +204,12 @@ class TitanEngine {
 
     for (int i = 0; i < sets.length; i++) {
       if (targetAll || (specificIdx != null && specificIdx == i)) {
-        String operandStr = action.split(RegExp(r'[+\-*/=]')).last.trim();
-        double operand = _tempVars[operandStr] ?? (double.tryParse(RegExp(r'\d+\.?\d*').stringMatch(operandStr) ?? "0") ?? 0);
-
         if (action.contains("WEIGHT")) {
           if (action.contains("+")) sets[i].weight += operand;
           else if (action.contains("-")) sets[i].weight -= operand;
           else if (action.contains("*")) sets[i].weight *= operand;
           else sets[i].weight = operand;
-        }
-        if (action.contains("REPS") || action.contains("SECONDS") || action.contains("DISTANCE")) {
+        } else {
           if (action.contains("+")) sets[i].value += operand.toInt();
           else if (action.contains("-")) sets[i].value -= operand.toInt();
           else sets[i].value = operand.toInt();
@@ -205,21 +219,14 @@ class TitanEngine {
     return sets;
   }
 
-  static void _handleStorage(String s, List<WorkoutSet> sets, ProtocolScope scope) {
-    final parts = s.split("AS");
-    if (parts.length < 2) return;
-    _tempVars[parts[1].trim()] = _resolveValue(parts[0].replaceAll("STORE", "").trim(), sets, scope);
-  }
-
   static double _resolveValue(String part, List<WorkoutSet> sets, ProtocolScope scope) {
-    if (_tempVars.containsKey(part.trim())) return _tempVars[part.trim()]!;
+    String p = part.trim();
+    if (_tempVars.containsKey(p)) return _tempVars[p]!;
     int idx = 0;
-    if (part.contains("SET")) {
-      idx = (int.tryParse(RegExp(r'\d+').stringMatch(part.split("SET")[1]) ?? "") ?? 1) - 1;
-    }
+    if (p.contains("SET")) idx = (int.tryParse(RegExp(r'\d+').stringMatch(p.split("SET")[1]) ?? "") ?? 1) - 1;
     if (idx < 0 || idx >= sets.length) idx = 0;
-    if (part.contains("WEIGHT")) return sets[idx].weight;
-    if (part.contains("REPS") || part.contains("SECONDS") || part.contains("DISTANCE")) return sets[idx].value.toDouble();
-    return double.tryParse(RegExp(r'\d+\.?\d*').stringMatch(part) ?? "0") ?? 0;
+    if (p.contains("WEIGHT")) return sets[idx].weight;
+    if (p.contains("REPS") || p.contains("SECONDS") || p.contains("DISTANCE")) return sets[idx].value.toDouble();
+    return double.tryParse(RegExp(r'\d+\.?\d*').stringMatch(p) ?? "0") ?? 0;
   }
 }
