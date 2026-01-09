@@ -13,6 +13,7 @@ class ObjectBoxService {
   late final Box<GoalNode> goalBox;
   late final Box<WorkoutSet> setBox;
   late final Box<CustomProtocol> protocolBox;
+  late final Box<LibraryExercise> libraryBox;
 
   ObjectBoxService._(this.store) {
     planBox = store.box<WorkoutNode>();
@@ -20,6 +21,7 @@ class ObjectBoxService {
     goalBox = store.box<GoalNode>();
     setBox = store.box<WorkoutSet>();
     protocolBox = store.box<CustomProtocol>();
+    libraryBox = store.box<LibraryExercise>();
 
     _seedInitialProtocols();
   }
@@ -30,9 +32,23 @@ class ObjectBoxService {
     return ObjectBoxService._(store);
   }
 
+  double evaluateFormula(String formula, {double w = 0, int r = 0}) {
+    try {
+      final logic = formula.toLowerCase().replaceAll(' ', '');
+      double current = logic.contains('w') ? w : r.toDouble();
+      final match = RegExp(r'([+\-*/])(\d+\.?\d*)').firstMatch(logic);
+      if (match == null) return current;
+      String op = match.group(1)!;
+      double val = double.parse(match.group(2)!);
+      if (op == '+') return current + val;
+      if (op == '-') return current - val;
+      if (op == '*') return current * val;
+      if (op == '/') return current / val;
+      return current;
+    } catch (e) { return w > 0 ? w : r.toDouble(); }
+  }
 
   void saveProtocol(CustomProtocol protocol) => protocolBox.put(protocol);
-
   List<CustomProtocol> getAllProtocols() => protocolBox.getAll();
 
   void _seedInitialProtocols() {
@@ -47,7 +63,6 @@ class ObjectBoxService {
     }
   }
 
-
   void savePlan(WorkoutNode plan) => planBox.put(plan);
 
   List<WorkoutNode> loadPlans() {
@@ -57,7 +72,6 @@ class ObjectBoxService {
     ).build();
     return query.find();
   }
-
 
   List<WorkoutLog> getLogsForDay(DateTime date) {
     final start = DateTime(date.year, date.month, date.day).millisecondsSinceEpoch;
@@ -73,10 +87,12 @@ class ObjectBoxService {
 
   void saveLog(WorkoutLog log) => logBox.put(log);
 
-
   void saveGoal(GoalNode goal) => goalBox.put(goal);
   List<GoalNode> loadGoals() => goalBox.getAll();
 
+  void saveLibraryExercise(LibraryExercise ex) => libraryBox.put(ex);
+  List<LibraryExercise> loadUserLibrary() => libraryBox.getAll();
+  void deleteLibraryExercise(int id) => libraryBox.remove(id);
 
   void deletePlan(int id) => planBox.remove(id);
   void deleteLog(int id) => logBox.remove(id);

@@ -10,7 +10,6 @@ class WorkoutNode {
   int id = 0;
 
   late String title;
-
   bool isRoot = false;
 
   int typeIndex = 0;
@@ -24,6 +23,7 @@ class WorkoutNode {
   final children = ToMany<WorkoutNode>();
   final sets = ToMany<WorkoutSet>();
 
+  // Constructor parameters now match the field names exactly
   WorkoutNode({
     this.id = 0,
     required this.title,
@@ -35,6 +35,7 @@ class WorkoutNode {
     this.muscleGroup,
   });
 
+  // UI COMPATIBILITY: These allow you to use .type and .trackingType in your logic
   @Transient()
   NodeType get type => NodeType.values[typeIndex];
   set type(NodeType v) => typeIndex = v.index;
@@ -60,8 +61,24 @@ class WorkoutSet {
   });
 }
 
+@Entity()
 class LibraryExercise {
-  final String name;
-  final TrackingType trackingType;
-  LibraryExercise({required this.name, required this.trackingType});
+  @Id()
+  int id = 0;
+
+  late String name;
+  int trackingIndex = 0; // Field name
+  String? muscleGroup;
+
+  // Constructor parameter matches field name
+  LibraryExercise({
+    this.id = 0,
+    required this.name,
+    this.trackingIndex = 0,
+    this.muscleGroup,
+  });
+
+  @Transient()
+  TrackingType get trackingType => TrackingType.values[trackingIndex];
+  set trackingType(TrackingType v) => trackingIndex = v.index;
 }

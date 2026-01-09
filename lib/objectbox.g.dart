@@ -276,6 +276,40 @@ final _entities = <obx_int.ModelEntity>[
     relations: <obx_int.ModelRelation>[],
     backlinks: <obx_int.ModelBacklink>[],
   ),
+  obx_int.ModelEntity(
+    id: const obx_int.IdUid(6, 2296419225456545558),
+    name: 'LibraryExercise',
+    lastPropertyId: const obx_int.IdUid(4, 8713623888601921611),
+    flags: 0,
+    properties: <obx_int.ModelProperty>[
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(1, 5918909409232975961),
+        name: 'id',
+        type: 6,
+        flags: 1,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(2, 7865911123231638597),
+        name: 'name',
+        type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(3, 3116997923618233545),
+        name: 'trackingIndex',
+        type: 6,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(4, 8713623888601921611),
+        name: 'muscleGroup',
+        type: 9,
+        flags: 0,
+      ),
+    ],
+    relations: <obx_int.ModelRelation>[],
+    backlinks: <obx_int.ModelBacklink>[],
+  ),
 ];
 
 /// Shortcut for [obx.Store.new] that passes [getObjectBoxModel] and for Flutter
@@ -316,7 +350,7 @@ Future<obx.Store> openStore({
 obx_int.ModelDefinition getObjectBoxModel() {
   final model = obx_int.ModelInfo(
     entities: _entities,
-    lastEntityId: const obx_int.IdUid(5, 8860872662423777712),
+    lastEntityId: const obx_int.IdUid(6, 2296419225456545558),
     lastIndexId: const obx_int.IdUid(1, 6851795456588437109),
     lastRelationId: const obx_int.IdUid(5, 1934228833631167816),
     lastSequenceId: const obx_int.IdUid(0, 0),
@@ -679,6 +713,58 @@ obx_int.ModelDefinition getObjectBoxModel() {
         return object;
       },
     ),
+    LibraryExercise: obx_int.EntityDefinition<LibraryExercise>(
+      model: _entities[5],
+      toOneRelations: (LibraryExercise object) => [],
+      toManyRelations: (LibraryExercise object) => {},
+      getId: (LibraryExercise object) => object.id,
+      setId: (LibraryExercise object, int id) {
+        object.id = id;
+      },
+      objectToFB: (LibraryExercise object, fb.Builder fbb) {
+        final nameOffset = fbb.writeString(object.name);
+        final muscleGroupOffset = object.muscleGroup == null
+            ? null
+            : fbb.writeString(object.muscleGroup!);
+        fbb.startTable(5);
+        fbb.addInt64(0, object.id);
+        fbb.addOffset(1, nameOffset);
+        fbb.addInt64(2, object.trackingIndex);
+        fbb.addOffset(3, muscleGroupOffset);
+        fbb.finish(fbb.endTable());
+        return object.id;
+      },
+      objectFromFB: (obx.Store store, ByteData fbData) {
+        final buffer = fb.BufferContext(fbData);
+        final rootOffset = buffer.derefObject(0);
+        final idParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          4,
+          0,
+        );
+        final nameParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 6, '');
+        final trackingIndexParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          8,
+          0,
+        );
+        final muscleGroupParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGetNullable(buffer, rootOffset, 10);
+        final object = LibraryExercise(
+          id: idParam,
+          name: nameParam,
+          trackingIndex: trackingIndexParam,
+          muscleGroup: muscleGroupParam,
+        );
+
+        return object;
+      },
+    ),
   };
 
   return obx_int.ModelDefinition(model, bindings);
@@ -866,5 +952,28 @@ class CustomProtocol_ {
   /// See [CustomProtocol.scopeIndex].
   static final scopeIndex = obx.QueryIntegerProperty<CustomProtocol>(
     _entities[4].properties[3],
+  );
+}
+
+/// [LibraryExercise] entity fields to define ObjectBox queries.
+class LibraryExercise_ {
+  /// See [LibraryExercise.id].
+  static final id = obx.QueryIntegerProperty<LibraryExercise>(
+    _entities[5].properties[0],
+  );
+
+  /// See [LibraryExercise.name].
+  static final name = obx.QueryStringProperty<LibraryExercise>(
+    _entities[5].properties[1],
+  );
+
+  /// See [LibraryExercise.trackingIndex].
+  static final trackingIndex = obx.QueryIntegerProperty<LibraryExercise>(
+    _entities[5].properties[2],
+  );
+
+  /// See [LibraryExercise.muscleGroup].
+  static final muscleGroup = obx.QueryStringProperty<LibraryExercise>(
+    _entities[5].properties[3],
   );
 }

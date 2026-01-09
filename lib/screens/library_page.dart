@@ -1,43 +1,36 @@
 import 'package:flutter/material.dart';
 import '../models/workout_node.dart';
+import '../services/objectbox_service.dart';
 import '../widgets/library_widgets.dart';
 
 class LibraryPage extends StatefulWidget {
   final Map<String, List<LibraryExercise>> library;
+  final ObjectBoxService service;
   final VoidCallback onUpdate;
 
-  const LibraryPage({super.key, required this.library, required this.onUpdate});
+  const LibraryPage({
+    super.key,
+    required this.library,
+    required this.service,
+    required this.onUpdate
+  });
 
   @override
   State<LibraryPage> createState() => _LibraryPageState();
 }
 
 class _LibraryPageState extends State<LibraryPage> {
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF050505),
-      appBar: AppBar(
-        title: const Text(
-          "EXERCISE DATABASE",
-          style: TextStyle(letterSpacing: 2, fontWeight: FontWeight.bold, fontSize: 16),
-        ),
-        centerTitle: true,
-        backgroundColor: Colors.transparent,
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: widget.library.keys.map((muscle) => LibraryMuscleCard(
-          muscle: muscle,
-          exercises: widget.library[muscle]!,
-          onAdd: () => _addNewExercise(muscle),
-          onDelete: (exObject) {
-            setState(() => widget.library[muscle]!.remove(exObject));
-            widget.onUpdate();
-          },
-        )).toList(),
-      ),
-    );
+
+  void _handleDelete(LibraryExercise ex, String muscle) {
+    setState(() {
+      widget.library[muscle]?.remove(ex);
+
+      if (ex.id != 0) {
+        widget.service.deleteLibraryExercise(ex.id);
+      }
+    });
+
+    widget.onUpdate();
   }
 
   void _addNewExercise(String muscle) {
@@ -112,12 +105,20 @@ class _LibraryPageState extends State<LibraryPage> {
               style: ElevatedButton.styleFrom(backgroundColor: Colors.orangeAccent),
               onPressed: () {
                 if (nameCtrl.text.isNotEmpty) {
+                  final newEx = LibraryExercise(
+                    name: nameCtrl.text,
+                    trackingIndex: selectedType.index,
+                    muscleGroup: muscle,
+                  );
+
+                  widget.service.saveLibraryExercise(newEx);
+
                   setState(() {
-                    widget.library[muscle]!.add(
-                        LibraryExercise(name: nameCtrl.text, trackingType: selectedType)
-                    );
+                    widget.library[muscle]?.add(newEx);
                   });
+
                   widget.onUpdate();
+
                   Navigator.pop(ctx);
                 }
               },
@@ -136,5 +137,29 @@ class _LibraryPageState extends State<LibraryPage> {
       case TrackingType.time: return "TIME (Plank/Holds)";
       case TrackingType.distance: return "DISTANCE (Cardio)";
     }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF050505),
+      appBar: AppBar(
+        title: const Text(
+          "EXERCISE DATABASE",
+          style: TextStyle(letterSpacing: 2, fontWeight: FontWeight.bold, fontSize: 16),
+        ),
+        centerTitle: true,
+        backgroundColor: Colors.transparent,
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(20),
+        children: widget.library.keys.map((muscle) => LibraryMuscleCard(
+          muscle: muscle,
+          exercises: widget.library[muscle]!,
+          onAdd: () => _addNewExercise(muscle),
+          onDelete: (exObject) => _handleDelete(exObject, muscle),
+        )).toList(),
+      ),
+    );
   }
 }

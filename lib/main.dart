@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'models/workout_node.dart';
 import 'models/workout_log.dart';
 import 'models/goal_node.dart';
+import 'models/custom_protocol.dart';
 import 'models/relic.dart';
 import 'services/objectbox_service.dart';
 import 'services/library_service.dart';
@@ -68,25 +69,31 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
   @override
   void initState() {
     super.initState();
-    _initialLoad();
+    _refreshData();
   }
 
-  Future<void> _initialLoad() async {
+  Future<void> _refreshData() async {
     final plans = widget.service.loadPlans();
     final logs = widget.service.getAllLogs();
     final goals = widget.service.loadGoals();
 
-    final library = LibraryService.getFullLibrary();
+    final Map<String, List<LibraryExercise>> fullMap = LibraryService.getFullLibrary();
+
+    final userAddedExercises = widget.service.loadUserLibrary();
+
+    for (var ex in userAddedExercises) {
+      if (ex.muscleGroup != null && fullMap.containsKey(ex.muscleGroup)) {
+        fullMap[ex.muscleGroup]!.add(ex);
+      }
+    }
 
     setState(() {
       myPlans = plans;
       myLogs = logs;
       myGoals = goals;
-      myLibrary = library;
+      myLibrary = fullMap;
     });
   }
-
-  void _refreshData() => _initialLoad();
 
   double _rawVal(dynamic v) => (v is num) ? v.toDouble() : 0.0;
 
@@ -178,12 +185,10 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
                 _hubTile("ANALYTICS", Icons.analytics_outlined, Colors.orangeAccent, () => _open(ProgressPage(logs: myLogs, plans: myPlans))),
                 _hubTile("ROADMAPS", Icons.track_changes_rounded, Colors.blueAccent, () => _open(ExpectedProgressPage(goals: myGoals, plans: myPlans, service: widget.service, onUpdate: _refreshData))),
                 _hubTile("BODY STATS", Icons.person_search_rounded, Colors.greenAccent, () => _open(MeasurementsPage(data: myBodyData, onUpdate: _refreshData))),
-                _hubTile("LIBRARY", Icons.book_rounded, Colors.purpleAccent, () => _open(LibraryPage(library: myLibrary, onUpdate: _refreshData))),
+                _hubTile("LIBRARY", Icons.book_rounded, Colors.purpleAccent, () => _open(LibraryPage(library: myLibrary, service: widget.service, onUpdate: _refreshData))),
                 _hubTile("EVOLUTION", Icons.accessibility_new_rounded, Colors.redAccent, () => _open(BodyVisualizerPage(data: myBodyData, logs: myLogs))),
                 _hubTile("RELIC VAULT", Icons.military_tech, Colors.amberAccent, () => _open(RelicVaultPage(logs: myLogs, bodyData: myBodyData, customRelics: myCustomRelics, service: widget.service, onUpdate: _refreshData))),
-
-                _hubTile("PROTOCOL FORGE", Icons.code_rounded, Colors.cyanAccent,
-                        () => _open(ProtocolEditorPage(service: widget.service, onUpdate: _refreshData))),
+                _hubTile("PROTOCOL FORGE", Icons.code_rounded, Colors.cyanAccent, () => _open(ProtocolEditorPage(service: widget.service, onUpdate: _refreshData))),
               ],
             ),
           ),
