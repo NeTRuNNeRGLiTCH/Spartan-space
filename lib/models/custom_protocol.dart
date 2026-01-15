@@ -28,10 +28,14 @@ class CustomProtocol {
   @Transient()
   String get scopeLabel {
     switch (scope) {
-      case ProtocolScope.power: return "POWER (Weight + Reps)";
-      case ProtocolScope.kinetic: return "KINETIC (Pure Reps)";
-      case ProtocolScope.chronos: return "CHRONOS (Time)";
-      case ProtocolScope.velocity: return "VELOCITY (Distance)";
+      case ProtocolScope.power:
+        return "POWER (Weight + Reps)";
+      case ProtocolScope.kinetic:
+        return "KINETIC (Pure Reps)";
+      case ProtocolScope.chronos:
+        return "CHRONOS (Time)";
+      case ProtocolScope.velocity:
+        return "VELOCITY (Distance)";
     }
   }
 }

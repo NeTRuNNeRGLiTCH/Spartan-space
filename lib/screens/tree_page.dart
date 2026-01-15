@@ -1,49 +1,37 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../models/workout_node.dart';
-import '../models/workout_log.dart';
-import '../models/goal_node.dart';
 import '../models/custom_protocol.dart';
-import '../services/objectbox_service.dart';
 import '../widgets/planner_widgets.dart';
+import '../controllers/tree_controller.dart';
+import '../providers/titan_provider.dart';
 import 'workout_routine.dart';
 
 class TreePage extends StatefulWidget {
-  final List<WorkoutNode> plans;
-  final List<WorkoutLog> logs;
-  final List<GoalNode> goals;
-  final Map<String, List<LibraryExercise>> library;
-  final ObjectBoxService service;
-  final VoidCallback onUpdate;
-
-  const TreePage({
-    super.key,
-    required this.plans,
-    required this.logs,
-    required this.goals,
-    required this.library,
-    required this.service,
-    required this.onUpdate,
-  });
+  const TreePage({super.key});
 
   @override
   _TreePageState createState() => _TreePageState();
 }
 
 class _TreePageState extends State<TreePage> {
-  late PageController _pageController;
-  int _currentIndex = 0;
+  late TreeController _controller;
 
   @override
   void initState() {
     super.initState();
-    _pageController = PageController(viewportFraction: 0.8);
+    _controller = TreeController(
+      provider: context.read<TitanProvider>(),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    if (widget.plans.isNotEmpty) {
-      _currentIndex = _currentIndex.clamp(0, widget.plans.length - 1);
+    final provider = context.watch<TitanProvider>();
+    if (provider.plans.isNotEmpty) {
+      _controller.currentIndex = _controller.currentIndex.clamp(0, provider.plans.length - 1);
     }
+
     return Scaffold(
       backgroundColor: const Color(0xFF050505),
       appBar: AppBar(
@@ -61,17 +49,17 @@ class _TreePageState extends State<TreePage> {
           ),
           SizedBox(
             height: 200,
-            child: widget.plans.isEmpty
+            child: provider.plans.isEmpty
                 ? const Center(child: Text("NO BLUEPRINTS", style: TextStyle(color: Colors.white38)))
                 : PageView.builder(
-              controller: _pageController,
-              itemCount: widget.plans.length,
-              onPageChanged: (i) => setState(() => _currentIndex = i),
-              itemBuilder: (context, index) => _buildBlueprintCarouselCard(index),
+              controller: _controller.pageController,
+              itemCount: provider.plans.length,
+              onPageChanged: _controller.updateIndex,
+              itemBuilder: (context, index) => _buildBlueprintCarouselCard(index, provider),
             ),
           ),
           const Divider(color: Colors.white24, indent: 30, endIndent: 30),
-          Expanded(child: widget.plans.isEmpty ? const SizedBox() : _buildRecursiveEditor()),
+          Expanded(child: provider.plans.isEmpty ? const SizedBox() : _buildRecursiveEditor(provider)),
         ],
       ),
       floatingActionButton: FloatingActionButton(
@@ -82,34 +70,33 @@ class _TreePageState extends State<TreePage> {
     );
   }
 
-  Widget _buildBlueprintCarouselCard(int index) {
-    var plan = widget.plans[index];
-    bool isSelected = index == _currentIndex;
+  Widget _buildBlueprintCarouselCard(int index, TitanProvider provider) {
+    final plan = provider.plans[index];
+    final isSelected = index == _controller.currentIndex;
     return PlannerPlanCard(
       title: plan.title,
       isSelected: isSelected,
       isPressing: false,
       onTap: () => _handleModuleLaunch(plan),
-      // --- IDENTIFICATION: Roots pass NULL as parent ---
       onSettings: () => _showFolderManager(plan, null),
     );
   }
 
   void _handleModuleLaunch(WorkoutNode plan) {
-    GoalNode? attachedRoadmap;
-    try {
-      attachedRoadmap = widget.goals.firstWhere((g) => g.title == plan.title);
-    } catch (e) { attachedRoadmap = null; }
+    final attachedRoadmap = _controller.getRoadmapForPlan(plan);
+    final days = plan.children.where((c) => c.type == NodeType.parent).toList();
 
-    List<WorkoutNode> days = plan.children.where((c) => c.type == NodeType.parent).toList();
     Navigator.push(context, MaterialPageRoute(builder: (context) => WorkoutRoutine(
-      plan: plan, roadmap: attachedRoadmap, selectedDay: days.isEmpty ? null : days.first,
-      logs: widget.logs, service: widget.service, onUpdate: widget.onUpdate,
+      plan: plan,
+      roadmap: attachedRoadmap,
+      selectedDay: days.isEmpty ? null : days.first,
     )));
   }
 
-  Widget _buildRecursiveEditor() {
-    var activePlan = widget.plans[_currentIndex];
+  Widget _buildRecursiveEditor(TitanProvider provider) {
+    final activePlan = _controller.activePlan;
+    if (activePlan == null) return const SizedBox();
+
     final childrenList = activePlan.children.toList();
     return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -129,7 +116,6 @@ class _TreePageState extends State<TreePage> {
       final subChildren = node.children.toList();
       return PlannerFolderTile(
         title: node.title,
-        // --- IDENTIFICATION: Folders pass their ACTUAL parent ---
         onManage: () => _showFolderManager(node, parent),
         children: subChildren.isEmpty
             ? [const Text("Empty", style: TextStyle(color: Colors.white38, fontSize: 11))]
@@ -139,22 +125,18 @@ class _TreePageState extends State<TreePage> {
   }
 
   void _showRenameDialog(WorkoutNode node, WorkoutNode? parent) {
-    TextEditingController titleCtrl = TextEditingController(text: node.title);
-    TextEditingController setRestCtrl = TextEditingController(text: (node.restTime ?? 90).toString());
-    TextEditingController interRestCtrl = TextEditingController(text: node.interExerciseRest.toString());
-
-    // --- LOGIC: If parent is null, this is the Master Blueprint ---
-    bool isRootBlueprint = parent == null;
+    final titleCtrl = TextEditingController(text: node.title);
+    final setRestCtrl = TextEditingController(text: (node.restTime ?? 90).toString());
+    final interRestCtrl = TextEditingController(text: node.interExerciseRest.toString());
+    final isRoot = parent == null;
 
     showDialog(context: context, builder: (ctx) => AlertDialog(
       backgroundColor: const Color(0xFF1A1A1A),
-      title: Text(isRootBlueprint ? "BLUEPRINT SPECS" : "FOLDER SETTINGS",
+      title: Text(isRoot ? "BLUEPRINT SPECS" : "FOLDER SETTINGS",
           style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
       content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
         TextField(controller: titleCtrl, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: "Identification Title")),
-
-        // --- ENFORCEMENT: Rest vars only visible/editable at the ROOT level ---
-        if (isRootBlueprint) ...[
+        if (isRoot) ...[
           const SizedBox(height: 25),
           const Align(alignment: Alignment.centerLeft, child: Text("GLOBAL RECOVERY CONFIG (S):", style: TextStyle(color: Colors.white38, fontSize: 8, fontWeight: FontWeight.bold))),
           const SizedBox(height: 10),
@@ -168,19 +150,13 @@ class _TreePageState extends State<TreePage> {
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("CANCEL", style: TextStyle(color: Colors.white24))),
         TextButton(onPressed: () {
-          node.title = titleCtrl.text;
-
-          if (isRootBlueprint) {
-            node.restTime = int.tryParse(setRestCtrl.text) ?? 90;
-            node.interExerciseRest = int.tryParse(interRestCtrl.text) ?? 180;
-            node.isRoot = true; // Ensure flag is set
-          } else {
-            node.restTime = null; // Subfolders cannot hold rest values
-            node.isRoot = false; // Ensure flag is cleared
-          }
-
-          widget.service.savePlan(node);
-          widget.onUpdate();
+          _controller.updateBlueprintSpecs(
+              node,
+              titleCtrl.text,
+              int.tryParse(setRestCtrl.text),
+              int.tryParse(interRestCtrl.text),
+              isRoot
+          );
           Navigator.pop(ctx);
         }, child: const Text("SAVE", style: TextStyle(color: Colors.orangeAccent, fontWeight: FontWeight.bold)))
       ],
@@ -202,23 +178,15 @@ class _TreePageState extends State<TreePage> {
   }
 
   void _showEditLeafDialog(WorkoutNode node, WorkoutNode parent) {
-    String unitLabel = "R";
-    ProtocolScope requiredScope = ProtocolScope.power;
+    final unitLabel = node.trackingType == TrackingType.weightReps ? "R" : (node.trackingType == TrackingType.time ? "SEC" : "METERS");
+    final ProtocolScope requiredScope = node.trackingType == TrackingType.weightReps
+        ? ProtocolScope.power
+        : (node.trackingType == TrackingType.repsOnly ? ProtocolScope.kinetic : (node.trackingType == TrackingType.time ? ProtocolScope.chronos : ProtocolScope.velocity));
 
-    switch (node.trackingType) {
-      case TrackingType.weightReps: unitLabel = "R"; requiredScope = ProtocolScope.power; break;
-      case TrackingType.repsOnly: unitLabel = "R"; requiredScope = ProtocolScope.kinetic; break;
-      case TrackingType.time: unitLabel = "SEC"; requiredScope = ProtocolScope.chronos; break;
-      case TrackingType.distance: unitLabel = "METERS"; requiredScope = ProtocolScope.velocity; break;
-    }
-
-    List<WorkoutSet> tempSets = node.sets.map((s) =>
-        WorkoutSet(value: s.value, weight: s.weight, isCompleted: s.isCompleted)).toList();
-
-    List<CustomProtocol> filteredProtocols = widget.service.getAllProtocols()
-        .where((p) => p.scopeIndex == requiredScope.index).toList();
-
+    final tempSets = node.sets.map((s) => WorkoutSet(value: s.value, weight: s.weight, isCompleted: s.isCompleted)).toList();
+    final filteredProtocols = _controller.provider.service.getAllProtocols().where((p) => p.scopeIndex == requiredScope.index).toList();
     int? selectedProtocolId = node.protocol.target?.id;
+    final restCtrl = TextEditingController(text: node.restTime?.toString() ?? "");
 
     showDialog(context: context, builder: (ctx) => StatefulBuilder(builder: (context, setDialogState) {
       CustomProtocol? currentSelection;
@@ -231,10 +199,9 @@ class _TreePageState extends State<TreePage> {
           width: double.maxFinite,
           child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
             TextField(
-              controller: TextEditingController(text: node.restTime?.toString() ?? ""),
+              controller: restCtrl,
               keyboardType: TextInputType.number,
               decoration: InputDecoration(labelText: "Set Recovery (s)", hintText: "Global: ${parent.restTime ?? 90}s"),
-              onChanged: (v) => node.restTime = int.tryParse(v),
             ),
             const SizedBox(height: 20),
             Align(alignment: Alignment.centerLeft, child: Text("ASSIGN ${requiredScope.name.toUpperCase()} SCRIPT:", style: const TextStyle(color: Colors.white38, fontSize: 8, fontWeight: FontWeight.bold))),
@@ -263,9 +230,10 @@ class _TreePageState extends State<TreePage> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("CANCEL", style: TextStyle(color: Colors.white38))),
           TextButton(onPressed: () {
-            node.sets.clear(); node.sets.addAll(tempSets);
-            if (selectedProtocolId != null) { node.protocol.target = filteredProtocols.firstWhere((p) => p.id == selectedProtocolId); } else { node.protocol.target = null; }
-            widget.service.savePlan(node); widget.onUpdate(); Navigator.pop(ctx);
+            CustomProtocol? finalProtocol;
+            try { finalProtocol = filteredProtocols.firstWhere((p) => p.id == selectedProtocolId); } catch (e) { finalProtocol = null; }
+            _controller.updateLeafNode(node, tempSets, finalProtocol, int.tryParse(restCtrl.text));
+            Navigator.pop(ctx);
           }, child: const Text("SAVE", style: TextStyle(color: Colors.orangeAccent, fontWeight: FontWeight.bold)))
         ],
       );
@@ -273,20 +241,18 @@ class _TreePageState extends State<TreePage> {
   }
 
   void _showAddRootDialog() {
-    TextEditingController ctrl = TextEditingController();
+    final ctrl = TextEditingController();
     showDialog(context: context, builder: (ctx) => AlertDialog(
       backgroundColor: const Color(0xFF1A1A1A),
       title: const Text("New Training Module", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
       content: TextField(controller: ctrl, autofocus: true, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(hintText: "e.g. Arnold Split")),
-      actions: [TextButton(onPressed: () {
-        if(ctrl.text.isNotEmpty) {
-          // --- MARK AS ROOT BLUEPRINT ---
-          final newNode = WorkoutNode(title: ctrl.text, typeIndex: NodeType.parent.index, isRoot: true, restTime: 90, interExerciseRest: 180);
-          widget.service.savePlan(newNode);
-          widget.onUpdate();
-        }
-        Navigator.pop(ctx);
-      }, child: const Text("INITIALIZE", style: TextStyle(color: Colors.orangeAccent)))],
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("CANCEL", style: TextStyle(color: Colors.white24))),
+        TextButton(onPressed: () {
+          if(ctrl.text.isNotEmpty) _controller.addRootBlueprint(ctrl.text);
+          Navigator.pop(ctx);
+        }, child: const Text("INITIALIZE", style: TextStyle(color: Colors.orangeAccent)))
+      ],
     ));
   }
 
@@ -301,17 +267,13 @@ class _TreePageState extends State<TreePage> {
     showModalBottomSheet(context: context, backgroundColor: const Color(0xFF111111), isScrollControlled: true, builder: (ctx) => DraggableScrollableSheet(
       initialChildSize: 0.7, expand: false, builder: (context, scrollController) => ListView(
       controller: scrollController,
-      children: widget.library.keys.map((muscle) => ExpansionTile(
+      children: context.read<TitanProvider>().library.keys.map((muscle) => ExpansionTile(
         title: Text(muscle.toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white)),
-        children: widget.library[muscle]!.map((libEx) => ListTile(
+        children: context.read<TitanProvider>().library[muscle]!.map((libEx) => ListTile(
           title: Text(libEx.name),
           onTap: () {
             Navigator.pop(ctx);
-            final newNode = WorkoutNode(title: libEx.name, typeIndex: NodeType.leaf.index, trackingIndex: libEx.trackingType.index, muscleGroup: muscle);
-            newNode.sets.add(WorkoutSet(value: 10, weight: 0));
-            parent.children.add(newNode);
-            widget.service.savePlan(parent);
-            widget.onUpdate();
+            _controller.addExerciseToFolder(parent, libEx, muscle);
           },
         )).toList(),
       )).toList(),
@@ -328,20 +290,18 @@ class _TreePageState extends State<TreePage> {
   }
 
   void _showFolderNameDialog(WorkoutNode parent) {
-    TextEditingController ctrl = TextEditingController();
+    final ctrl = TextEditingController();
     showDialog(context: context, builder: (ctx) => AlertDialog(
       backgroundColor: const Color(0xFF1A1A1A),
       title: const Text("Folder Title"),
       content: TextField(controller: ctrl, autofocus: true, style: const TextStyle(color: Colors.white)),
-      actions: [TextButton(onPressed: () {
-        if(ctrl.text.isNotEmpty) {
-          // --- MARK AS SUB-FOLDER (Not a Root) ---
-          parent.children.add(WorkoutNode(title: ctrl.text, typeIndex: NodeType.parent.index, isRoot: false));
-          widget.service.savePlan(parent);
-          widget.onUpdate();
-        }
-        Navigator.pop(ctx);
-      }, child: const Text("ADD"))],
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("CANCEL", style: TextStyle(color: Colors.white24))),
+        TextButton(onPressed: () {
+          if(ctrl.text.isNotEmpty) _controller.addSubFolder(parent, ctrl.text);
+          Navigator.pop(ctx);
+        }, child: const Text("ADD"))
+      ],
     ));
   }
 
@@ -352,9 +312,8 @@ class _TreePageState extends State<TreePage> {
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("NO")),
         TextButton(onPressed: () {
-          if (parent != null) { parent.children.remove(node); widget.service.savePlan(parent); }
-          else { widget.service.deletePlan(node.id); }
-          widget.onUpdate(); Navigator.pop(ctx);
+          _controller.deleteNode(node, parent);
+          Navigator.pop(ctx);
         }, child: const Text("DELETE", style: TextStyle(color: Colors.redAccent))),
       ],
     ));

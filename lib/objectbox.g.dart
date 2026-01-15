@@ -15,6 +15,7 @@ import 'package:objectbox/objectbox.dart' as obx;
 import 'package:objectbox_flutter_libs/objectbox_flutter_libs.dart';
 
 import 'models/custom_protocol.dart';
+import 'models/global_variable.dart';
 import 'models/goal_node.dart';
 import 'models/workout_log.dart';
 import 'models/workout_node.dart';
@@ -310,6 +311,35 @@ final _entities = <obx_int.ModelEntity>[
     relations: <obx_int.ModelRelation>[],
     backlinks: <obx_int.ModelBacklink>[],
   ),
+  obx_int.ModelEntity(
+    id: const obx_int.IdUid(7, 6529313277335669002),
+    name: 'GlobalVariable',
+    lastPropertyId: const obx_int.IdUid(3, 6550872293731509479),
+    flags: 0,
+    properties: <obx_int.ModelProperty>[
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(1, 3159920817055027218),
+        name: 'id',
+        type: 6,
+        flags: 1,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(2, 7521548991276013227),
+        name: 'name',
+        type: 9,
+        flags: 2080,
+        indexId: const obx_int.IdUid(2, 1532637727925846554),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(3, 6550872293731509479),
+        name: 'value',
+        type: 8,
+        flags: 0,
+      ),
+    ],
+    relations: <obx_int.ModelRelation>[],
+    backlinks: <obx_int.ModelBacklink>[],
+  ),
 ];
 
 /// Shortcut for [obx.Store.new] that passes [getObjectBoxModel] and for Flutter
@@ -350,8 +380,8 @@ Future<obx.Store> openStore({
 obx_int.ModelDefinition getObjectBoxModel() {
   final model = obx_int.ModelInfo(
     entities: _entities,
-    lastEntityId: const obx_int.IdUid(6, 2296419225456545558),
-    lastIndexId: const obx_int.IdUid(1, 6851795456588437109),
+    lastEntityId: const obx_int.IdUid(7, 6529313277335669002),
+    lastIndexId: const obx_int.IdUid(2, 1532637727925846554),
     lastRelationId: const obx_int.IdUid(5, 1934228833631167816),
     lastSequenceId: const obx_int.IdUid(0, 0),
     retiredEntityUids: const [],
@@ -765,6 +795,50 @@ obx_int.ModelDefinition getObjectBoxModel() {
         return object;
       },
     ),
+    GlobalVariable: obx_int.EntityDefinition<GlobalVariable>(
+      model: _entities[6],
+      toOneRelations: (GlobalVariable object) => [],
+      toManyRelations: (GlobalVariable object) => {},
+      getId: (GlobalVariable object) => object.id,
+      setId: (GlobalVariable object, int id) {
+        object.id = id;
+      },
+      objectToFB: (GlobalVariable object, fb.Builder fbb) {
+        final nameOffset = fbb.writeString(object.name);
+        fbb.startTable(4);
+        fbb.addInt64(0, object.id);
+        fbb.addOffset(1, nameOffset);
+        fbb.addFloat64(2, object.value);
+        fbb.finish(fbb.endTable());
+        return object.id;
+      },
+      objectFromFB: (obx.Store store, ByteData fbData) {
+        final buffer = fb.BufferContext(fbData);
+        final rootOffset = buffer.derefObject(0);
+        final idParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          4,
+          0,
+        );
+        final nameParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 6, '');
+        final valueParam = const fb.Float64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          8,
+          0,
+        );
+        final object = GlobalVariable(
+          id: idParam,
+          name: nameParam,
+          value: valueParam,
+        );
+
+        return object;
+      },
+    ),
   };
 
   return obx_int.ModelDefinition(model, bindings);
@@ -975,5 +1049,23 @@ class LibraryExercise_ {
   /// See [LibraryExercise.muscleGroup].
   static final muscleGroup = obx.QueryStringProperty<LibraryExercise>(
     _entities[5].properties[3],
+  );
+}
+
+/// [GlobalVariable] entity fields to define ObjectBox queries.
+class GlobalVariable_ {
+  /// See [GlobalVariable.id].
+  static final id = obx.QueryIntegerProperty<GlobalVariable>(
+    _entities[6].properties[0],
+  );
+
+  /// See [GlobalVariable.name].
+  static final name = obx.QueryStringProperty<GlobalVariable>(
+    _entities[6].properties[1],
+  );
+
+  /// See [GlobalVariable.value].
+  static final value = obx.QueryDoubleProperty<GlobalVariable>(
+    _entities[6].properties[2],
   );
 }

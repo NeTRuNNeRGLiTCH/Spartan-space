@@ -252,10 +252,36 @@
         }
       ],
       "relations": []
+    },
+    {
+      "id": "7:6529313277335669002",
+      "lastPropertyId": "3:6550872293731509479",
+      "name": "GlobalVariable",
+      "properties": [
+        {
+          "id": "1:3159920817055027218",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:7521548991276013227",
+          "name": "name",
+          "indexId": "2:1532637727925846554",
+          "type": 9,
+          "flags": 2080
+        },
+        {
+          "id": "3:6550872293731509479",
+          "name": "value",
+          "type": 8
+        }
+      ],
+      "relations": []
     }
   ],
-  "lastEntityId": "6:2296419225456545558",
-  "lastIndexId": "1:6851795456588437109",
+  "lastEntityId": "7:6529313277335669002",
+  "lastIndexId": "2:1532637727925846554",
   "lastRelationId": "5:1934228833631167816",
   "lastSequenceId": "0:0",
   "modelVersion": 5,

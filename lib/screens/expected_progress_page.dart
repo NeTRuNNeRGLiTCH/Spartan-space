@@ -1,30 +1,33 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../models/goal_node.dart';
 import '../models/workout_node.dart';
-import '../services/objectbox_service.dart';
 import '../widgets/expected_widgets.dart';
+import '../controllers/expected_progress_controller.dart';
+import '../providers/titan_provider.dart';
 
 class ExpectedProgressPage extends StatefulWidget {
-  final List<GoalNode> goals;
-  final List<WorkoutNode> plans;
-  final ObjectBoxService service;
-  final VoidCallback onUpdate;
-
-  const ExpectedProgressPage({
-    super.key,
-    required this.goals,
-    required this.plans,
-    required this.service,
-    required this.onUpdate,
-  });
+  const ExpectedProgressPage({super.key});
 
   @override
   State<ExpectedProgressPage> createState() => _ExpectedProgressPageState();
 }
 
 class _ExpectedProgressPageState extends State<ExpectedProgressPage> {
+  late ExpectedProgressController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = ExpectedProgressController(
+      provider: context.read<TitanProvider>(),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final provider = context.watch<TitanProvider>();
+
     return Scaffold(
       backgroundColor: const Color(0xFF050505),
       appBar: AppBar(
@@ -34,16 +37,16 @@ class _ExpectedProgressPageState extends State<ExpectedProgressPage> {
         backgroundColor: Colors.transparent,
         elevation: 0,
       ),
-      body: widget.goals.isEmpty
+      body: provider.goals.isEmpty
           ? _buildEmptyState()
           : ListView.builder(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-        itemCount: widget.goals.length,
-        itemBuilder: (context, index) => _buildRecursiveGoal(widget.goals[index], widget.goals),
+        itemCount: provider.goals.length,
+        itemBuilder: (context, index) => _buildRecursiveGoal(provider.goals[index], provider.goals),
       ),
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: Colors.blueAccent,
-        onPressed: () => _showFolderPicker(context),
+        onPressed: () => _showFolderPicker(context, provider),
         icon: const Icon(Icons.add_link, color: Colors.white),
         label: const Text("ATTACH ROADMAP", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
       ),
@@ -65,28 +68,25 @@ class _ExpectedProgressPageState extends State<ExpectedProgressPage> {
   }
 
   Widget _buildRecursiveGoal(GoalNode node, List<GoalNode> parentList) {
-    if (node.type == GoalNodeType.exercise) {
-      return GoalExerciseTile(
-        title: node.title,
-        nextWeight: node.nextTargetWeight,
-        onEdit: () => _showEditExerciseGoal(node),
-      );
-    } else {
-      final childrenList = node.children.toList();
-      return GoalFolderTile(
-        title: node.title,
-        current: node.completedSessions,
-        total: node.totalSessions,
-        onManage: () => _showParentManager(node, parentList),
-        children: childrenList.isEmpty
-            ? [const Center(child: Text("No linked exercises", style: TextStyle(color: Colors.white10, fontSize: 11)))]
-            : childrenList.map((child) => _buildRecursiveGoal(child, childrenList)).toList(),
-      );
-    }
+    return node.type == GoalNodeType.exercise
+        ? GoalExerciseTile(
+      title: node.title,
+      nextWeight: node.nextTargetWeight,
+      onEdit: () => _showEditExerciseGoal(node),
+    )
+        : GoalFolderTile(
+      title: node.title,
+      current: node.completedSessions,
+      total: node.totalSessions,
+      onManage: () => _showParentManager(node, parentList),
+      children: node.children.isEmpty
+          ? [const Center(child: Text("No linked exercises", style: TextStyle(color: Colors.white10, fontSize: 11)))]
+          : node.children.map((child) => _buildRecursiveGoal(child, node.children.toList())).toList(),
+    );
   }
 
-  void _showFolderPicker(BuildContext context) {
-    if (widget.plans.isEmpty) {
+  void _showFolderPicker(BuildContext context, TitanProvider provider) {
+    if (provider.plans.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         backgroundColor: Colors.redAccent,
         content: Text("No Blueprints Found. Create one in 'PLAN' first."),
@@ -108,13 +108,13 @@ class _ExpectedProgressPageState extends State<ExpectedProgressPage> {
           Flexible(
             child: ListView.builder(
               shrinkWrap: true,
-              itemCount: widget.plans.length,
+              itemCount: provider.plans.length,
               itemBuilder: (ctx, i) => ListTile(
                 leading: const Icon(Icons.architecture, color: Colors.orangeAccent),
-                title: Text(widget.plans[i].title, style: const TextStyle(fontWeight: FontWeight.bold)),
+                title: Text(provider.plans[i].title, style: const TextStyle(fontWeight: FontWeight.bold)),
                 onTap: () {
                   Navigator.pop(ctx);
-                  _setupRoadmapDetails(widget.plans[i]);
+                  _setupRoadmapDetails(provider.plans[i]);
                 },
               ),
             ),
@@ -126,7 +126,7 @@ class _ExpectedProgressPageState extends State<ExpectedProgressPage> {
   }
 
   void _setupRoadmapDetails(WorkoutNode source) {
-    TextEditingController sessionCtrl = TextEditingController(text: "10");
+    final sessionCtrl = TextEditingController(text: "10");
 
     showDialog(
       context: context,
@@ -144,18 +144,8 @@ class _ExpectedProgressPageState extends State<ExpectedProgressPage> {
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
             onPressed: () {
-              int totalS = int.tryParse(sessionCtrl.text) ?? 10;
-
-              GoalNode newRoadmap = GoalNode(
-                title: source.title,
-                typeIndex: GoalNodeType.folder.index,
-                totalSessions: totalS,
-              );
-
-              _cloneStructure(source, newRoadmap);
-
-              widget.service.saveGoal(newRoadmap);
-              widget.onUpdate();
+              final totalS = int.tryParse(sessionCtrl.text) ?? 10;
+              _controller.linkRoadmapToPlan(source, totalS);
               Navigator.pop(ctx);
             },
             child: const Text("CREATE"),
@@ -163,27 +153,6 @@ class _ExpectedProgressPageState extends State<ExpectedProgressPage> {
         ],
       ),
     );
-  }
-
-  void _cloneStructure(WorkoutNode source, GoalNode target) {
-    for (var child in source.children.toList()) {
-      if (child.type == NodeType.leaf) {
-        final sets = child.sets.toList();
-        double startWeight = sets.isNotEmpty ? sets.first.weight : 0;
-
-        target.children.add(GoalNode(
-          title: child.title,
-          typeIndex: GoalNodeType.exercise.index,
-          currentWeight: startWeight,
-          targetWeight: startWeight + 10,
-          weightStep: 5.0,
-        ));
-      } else {
-        GoalNode sub = GoalNode(title: child.title, typeIndex: GoalNodeType.folder.index);
-        target.children.add(sub);
-        _cloneStructure(child, sub);
-      }
-    }
   }
 
   void _showParentManager(GoalNode node, List<GoalNode> parentList) {
@@ -196,11 +165,7 @@ class _ExpectedProgressPageState extends State<ExpectedProgressPage> {
           leading: const Icon(Icons.fast_forward, color: Colors.greenAccent),
           title: const Text("Manually Advance Session"),
           onTap: () {
-            if (node.completedSessions < node.totalSessions) {
-              node.completedSessions++;
-              widget.service.saveGoal(node);
-              widget.onUpdate();
-            }
+            _controller.advanceSession(node);
             Navigator.pop(ctx);
           },
         ),
@@ -208,9 +173,7 @@ class _ExpectedProgressPageState extends State<ExpectedProgressPage> {
           leading: const Icon(Icons.settings_backup_restore, color: Colors.white38),
           title: const Text("Reset Roadmap Progress"),
           onTap: () {
-            node.completedSessions = 0;
-            widget.service.saveGoal(node);
-            widget.onUpdate();
+            _controller.resetProgress(node);
             Navigator.pop(ctx);
           },
         ),
@@ -218,8 +181,7 @@ class _ExpectedProgressPageState extends State<ExpectedProgressPage> {
           leading: const Icon(Icons.delete_sweep, color: Colors.redAccent),
           title: const Text("Delete Roadmap"),
           onTap: () {
-            widget.service.goalBox.remove(node.id);
-            widget.onUpdate();
+            _controller.deleteRoadmap(node.id);
             Navigator.pop(ctx);
           },
         ),
@@ -228,9 +190,9 @@ class _ExpectedProgressPageState extends State<ExpectedProgressPage> {
   }
 
   void _showEditExerciseGoal(GoalNode node) {
-    TextEditingController c1 = TextEditingController(text: node.currentWeight.toString());
-    TextEditingController c2 = TextEditingController(text: node.targetWeight.toString());
-    TextEditingController c3 = TextEditingController(text: node.weightStep.toString());
+    final c1 = TextEditingController(text: node.currentWeight.toString());
+    final c2 = TextEditingController(text: node.targetWeight.toString());
+    final c3 = TextEditingController(text: node.weightStep.toString());
 
     showDialog(
       context: context,
@@ -251,12 +213,10 @@ class _ExpectedProgressPageState extends State<ExpectedProgressPage> {
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("CANCEL")),
           TextButton(
             onPressed: () {
-              node.currentWeight = double.tryParse(c1.text) ?? 0;
-              node.targetWeight = double.tryParse(c2.text) ?? 0;
-              node.weightStep = double.tryParse(c3.text) ?? 2.5;
-
-              widget.service.saveGoal(node);
-              widget.onUpdate();
+              final current = double.tryParse(c1.text) ?? 0;
+              final target = double.tryParse(c2.text) ?? 0;
+              final step = double.tryParse(c3.text) ?? 2.5;
+              _controller.updateExerciseGoal(node, current, target, step);
               Navigator.pop(ctx);
             },
             child: const Text("SAVE", style: TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold)),

@@ -40,7 +40,7 @@ class GoalNode {
     double totalWeightToGain = targetWeight - currentWeight;
     int totalStepsNeeded = (totalWeightToGain / weightStep).ceil();
     int currentStep = ((totalStepsNeeded * (completedSessions + 1)) / totalSessions).floor();
-    if (currentStep > totalStepsNeeded) currentStep = totalStepsNeeded;
-    return currentWeight + (currentStep * weightStep);
+
+    return currentWeight + ((currentStep > totalStepsNeeded ? totalStepsNeeded : currentStep) * weightStep);
   }
 }

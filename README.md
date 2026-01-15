@@ -1,75 +1,67 @@
-# 🔱 Titan Log Pro V2: Algorithmic Performance Engine
+# TITAN LOG PRO v2.1.0 🛡️
+### Advanced Human Performance & Biometric Intelligence System
 
-**"Don't just log. Program your evolution."**
-
-Most gym apps are digital versions of a paper notebook. They track what you *did*, but they don't understand the logic of growth. **Titan Log Pro V2** is a high-fidelity training terminal that treats physical progression as a software engineering problem.
-
-With the introduction of **TitanScript**, your workout plan is no longer a static list—it is a living, programmable algorithm.
+**Titan Log Pro** is a tactical execution environment designed for high-level athletes and biohackers. While standard gym apps act as digital notebooks, Titan Log Pro operates as a **Kinanthropometric Expert System**, using advanced mathematical models and a custom logic engine to dictate the path of physical evolution.
 
 ---
 
-## ⚡ New in Version 2.0: The Engine Update
+## 🚀 THE TITAN ADVANTAGE: WHY THIS IS DIFFERENT
 
-### 1. TitanScript DSL (Domain Specific Language)
-The core of V2.0 is a custom-built, human-readable functional language. Users can now "Engrave" logical protocols directly into their exercises to automate auto-regulation and progression.
-*   **Sentential Logic:** Uses simple English-style syntax (`WHEN`, `DO`, `OTHERWISE`) terminated by a command period (`.`).
-*   **Stateful Memory:** Support for ephemeral variables using `STORE [value] AS [name]` to compare historical data against live performance.
-*   **Iterative Context:** Dynamic set-pointers (`set(this)`) allow for complex loops that generate pyramids and dropsets in a single line of code.
+Most fitness apps track data. Titan Log Pro **interprets** it.
 
-### 2. The Protocol Forge (Visual IDE)
-A dedicated integrated development environment (IDE) built into the terminal.
-*   **Live Telemetry:** Real-time syntax highlighting (Cyan for Keywords, Green for Data, Orange for Pointers).
-*   **Logic Guard:** A built-in compiler that detects typos (`sit1` vs `set1`) and scope violations before they are saved to the core.
-*   **Command Palette:** A configurable Tri-Button bar for rapid logic injection on mobile devices.
+### 1. Scientific Bodybuilding HUD
+Unlike basic trackers, Titan Log Pro implements elite-tier physiological formulas:
+- **Physique Archetyping:** Calculates **FFMI (Fat-Free Mass Index)** and assigns users to "Combat Classes" (Genesis, Peak, Hybrid, Paragon, Titan) based on tissue density.
+- **Symmetry Telemetry:** Uses logarithmic delta analysis of limb proportions to detect bilateral imbalances.
+- **Genetic Potential Modeling:** Implements joint-to-height ratios to calculate theoretical muscular limits based on skeletal frame density.
 
-### 3. Master Codex
-A high-fidelity technical manual accessible directly from the Forge. It provides deep-dive documentation on lexer rules, mathematical operators, and logic branching for non-developer athletes.
+### 2. TitanScript: Autonomous Programming
+The app features a custom-built **Domain Specific Language (DSL)** that allows for "Smart Overload." You don't just log a set; the engine executes your personalized protocol to calculate your *next* session's targets in real-time.
+- **Interpretive Core:** Handles nested logic (WHEN/DO/OTHERWISE) and iterative loops (REPEAT).
+- **Auto-Regulation:** The app automatically adjusts intensity and volume based on session compliance.
 
----
+### 3. The Relic Vault (Gamified Excellence)
+A milestone system based on historical data and biological thresholds.
+- **Data-Driven Achievements:** Unlock "Relics" like *The Megaton* (1,000,000kg lifetime volume) or *Apollo Sync* (Elite shoulder-to-waist ratios).
+- **The Greek Convergence:** A perfection-check algorithm that monitors if your proportions match the "Golden Era" ideal (2.5% tolerance).
 
-## 🏗 System Architecture
-
-### 1. Recursive Node Blueprints
-The system utilizes a **Hierarchical Tree Structure** instead of flat lists. Exercises inherit global recovery specs from "Root Blueprints" but support "Local Shadowing" for specific high-intensity overrides.
-*   **Standard Recovery:** Global set-to-set rest logic.
-*   **Module Transition:** Defined "Neural Recharge" periods between different exercise modules.
-
-### 2. Titan Telemetry (Biometrics)
-Built-in physiological analysis engine tracking you against your natural biological ceiling:
-*   **The Casey Butt Model:** Skeletal-anchor based muscular potential calculation.
-*   **FFMI & Density:** Tracking tissue density and muscularity rarity.
-*   **Symmetry Detection:** Flags structural "glitches" (bilateral imbalances) with 0.5cm sensitivity.
-*   **Equilibrium Polygon:** 6-axis radar mapping of Power, Symmetry, Rarity, and Volume.
-
-### 3. The Relic Archive
-A persistence layer that verifies significant structural milestones (SBD Tiers, Greek Convergence, and Circadian patterns) through automated history scanning.
+### 4. Titan ID: Tactical Data Export
+Generate and share your biometric credentials.
+- **Visual Identity:** Export a "Titan ID Card" containing your FFMI, Chassis Tier, and Class Assignment.
+- **Verification:** Uses a specialized screenshot service to create high-fidelity shareable tactical summaries.
 
 ---
 
-## 🛠 Tech Stack (Upgraded)
+## 🛠️ ARCHITECTURAL OVERVIEW
 
-*   **Frontend:** Flutter (Dart 3.7+) for a high-contrast, low-latency Terminal UI.
-*   **Database:** **ObjectBox (Vector NoSQL)**. Migrated from Hive to support high-performance recursive relations and faster indexing for infinite history.
-*   **Logic Engine:** **TitanScript V4.5**. A custom-built interpreter with recursive function calling (`CALL`) and stateful memory registry.
-*   **Library:** 300+ Exercise Archive with dedicated **Calisthenics & Skill** protocols.
+The application is built on a high-performance **C++ backed NoSQL architecture**, optimized for speed and offline reliability.
+
+### The Controller Layer (The Brains)
+- **BodyVisualizerController:** Manages complex radar charts and structural evolution bars.
+- **SessionController:** A real-time state machine managing rest timers, haptic feedback, and performance logging.
+- **ProtocolController:** The IDE for TitanScript, featuring real-time syntax highlighting and lexical validation.
+- **MeasurementsController:** Handles biometric input and automates the **U.S. Navy Body Fat formula** and BMI calculations.
+
+### Performance & Memory Tiering
+To maintain 60FPS on low-resource hardware, the app utilizes **Manual Memory Paging**:
+- **Hot Tier:** 31-day active window for high-speed logging.
+- **Cold Tier:** Archive data is paged on-demand (Titan Sync) and automatically deloaded after 60 seconds to maintain a zero-lag footprint.
+
+---
+
+## 🏗️ TECH STACK
+- **Framework:** Flutter (Dart)
+- **Database:** ObjectBox (High-performance NoSQL with C-API bindings)
+- **Graphics:** CustomPainter for Radar Polygons and Equilibrium charts.
+- **Interpreter:** Custom Recursive-Descent Lexer & Parser.
 
 ---
 
-## 🚀 Initializing the System
-
-1.  **Clone the Archive:**
-    ```bash
-    git clone https://github.com/NeTRuNNeRGLiTCH/Spartan-space.git
-    ```
-2.  **Generate Database Schema:**
-    ```bash
-    flutter pub get
-    flutter pub run build_runner build --delete-conflicting-outputs
-    ```
-3.  **Launch Terminal:**
-    ```bash
-    flutter run --release
-    ```
-
----
-> *"In the gym, as in engineering, you cannot optimize what you do not measure. In V2, we don't just measure; we program."*
+## 📜 EXAMPLE TITANSCRIPT v2.1.0
+```text
+WHEN Reps of all >= 12 DO
+  Weight of all + 2.5 .
+OTHERWISE
+  REPEAT 2 DO
+    Weight of set(this) + 1.25 .
+END .

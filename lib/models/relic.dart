@@ -465,7 +465,7 @@ class Relic {
             hasRun = true;
           }
         }
-        return hasSquat && hasRun;
+        return hasRun && hasSquat;
       },
     ),
     Relic(
@@ -528,9 +528,7 @@ class Relic {
       requirement: 'LOG A SESSION WITH 50% USUAL WEIGHTS',
       icon: Icons.science,
       color: Colors.lightBlueAccent,
-      isUnlocked: (logs, data) {
-        return logs.length > 30;
-      },
+      isUnlocked: (logs, data) => logs.length > 30,
     ),
     Relic(
       id: 'bone_density_alpha',
@@ -559,10 +557,10 @@ class Relic {
       isUnlocked: (logs, data) {
         for (var l in logs) {
           if (l.exerciseName.toLowerCase().contains("bench")) {
-          for (var s in l.performedSets) {
-            if (s.weight >= 60) return true;
+            for (var s in l.performedSets) {
+              if (s.weight >= 60) return true;
+            }
           }
-        }
         }
         return false;
       },
@@ -577,10 +575,10 @@ class Relic {
       isUnlocked: (logs, data) {
         for (var l in logs) {
           if (l.exerciseName.toLowerCase().contains("bench")) {
-          for (var s in l.performedSets) {
-            if (s.weight >= 100) return true;
+            for (var s in l.performedSets) {
+              if (s.weight >= 100) return true;
+            }
           }
-        }
         }
         return false;
       },
@@ -595,10 +593,10 @@ class Relic {
       isUnlocked: (logs, data) {
         for (var l in logs) {
           if (l.exerciseName.toLowerCase().contains("bench")) {
-          for (var s in l.performedSets) {
-            if (s.weight >= 140) return true;
+            for (var s in l.performedSets) {
+              if (s.weight >= 140) return true;
+            }
           }
-        }
         }
         return false;
       },
@@ -651,9 +649,14 @@ class CustomRelic extends Relic {
   );
 
   Map<String, dynamic> toJson() => {
-    'id': id, 'title': title, 'description': description,
-    'requirement': requirement, 'icon': icon.codePoint,
-    'color': color.value, 'targetEx': targetExercise, 'targetW': targetWeight,
+    'id': id,
+    'title': title,
+    'description': description,
+    'requirement': requirement,
+    'icon': icon.codePoint,
+    'color': color.value,
+    'targetEx': targetExercise,
+    'targetW': targetWeight,
   };
 
   factory CustomRelic.fromJson(Map<String, dynamic> json) => CustomRelic(

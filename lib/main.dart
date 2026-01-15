@@ -1,12 +1,8 @@
 import 'package:flutter/material.dart';
-import 'models/workout_node.dart';
-import 'models/workout_log.dart';
-import 'models/goal_node.dart';
-import 'models/custom_protocol.dart';
-import 'models/relic.dart';
+import 'package:provider/provider.dart';
 import 'services/objectbox_service.dart';
-import 'services/library_service.dart';
 import 'services/export_service.dart';
+import 'providers/titan_provider.dart';
 import 'screens/home_page.dart';
 import 'screens/tree_page.dart';
 import 'screens/history_page.dart';
@@ -20,15 +16,17 @@ import 'screens/protocol_editor_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
   final service = await ObjectBoxService.init();
-
-  runApp(MyGymApp(service: service));
+  runApp(
+    ChangeNotifierProvider(
+      create: (_) => TitanProvider(service: service),
+      child: MyGymApp(),
+    ),
+  );
 }
 
 class MyGymApp extends StatelessWidget {
-  final ObjectBoxService service;
-  const MyGymApp({super.key, required this.service});
+  const MyGymApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -43,14 +41,13 @@ class MyGymApp extends StatelessWidget {
           secondary: Colors.orangeAccent,
         ),
       ),
-      home: MainNavigationWrapper(service: service),
+      home: const MainNavigationWrapper(),
     );
   }
 }
 
 class MainNavigationWrapper extends StatefulWidget {
-  final ObjectBoxService service;
-  const MainNavigationWrapper({super.key, required this.service});
+  const MainNavigationWrapper({super.key});
 
   @override
   _MainNavigationWrapperState createState() => _MainNavigationWrapperState();
@@ -59,48 +56,14 @@ class MainNavigationWrapper extends StatefulWidget {
 class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
   int _currentIndex = 0;
 
-  List<WorkoutNode> myPlans = [];
-  List<WorkoutLog> myLogs = [];
-  List<GoalNode> myGoals = [];
-  Map<String, dynamic> myBodyData = {};
-  Map<String, List<LibraryExercise>> myLibrary = {};
-  List<CustomRelic> myCustomRelics = [];
-
-  @override
-  void initState() {
-    super.initState();
-    _refreshData();
-  }
-
-  Future<void> _refreshData() async {
-    final plans = widget.service.loadPlans();
-    final logs = widget.service.getAllLogs();
-    final goals = widget.service.loadGoals();
-
-    final Map<String, List<LibraryExercise>> fullMap = LibraryService.getFullLibrary();
-
-    final userAddedExercises = widget.service.loadUserLibrary();
-    for (var ex in userAddedExercises) {
-      if (ex.muscleGroup != null && fullMap.containsKey(ex.muscleGroup)) {
-        fullMap[ex.muscleGroup]!.add(ex);
-      }
-    }
-
-    setState(() {
-      myPlans = plans;
-      myLogs = logs;
-      myGoals = goals;
-      myLibrary = fullMap;
-    });
-  }
-
   double _rawVal(dynamic v) => (v is num) ? v.toDouble() : 0.0;
 
-  void _generateTitanID() {
-    double w = _rawVal(myBodyData['weight']);
-    double h = _rawVal(myBodyData['height']);
-    double bf = _rawVal(myBodyData['bf']);
-    double wrist = _rawVal(myBodyData['wrist'] ?? 17.5);
+  void _generateTitanID(TitanProvider provider) {
+    final data = provider.bodyData;
+    double w = _rawVal(data['weight']);
+    double h = _rawVal(data['height']);
+    double bf = _rawVal(data['bf']);
+    double wrist = _rawVal(data['wrist'] ?? 17.5);
 
     double leanMass = w * (1 - (bf / 100.0));
     double ffmi = (h > 0) ? (leanMass / ((h / 100) * (h / 100))) + (6.3 * (1.8 - (h / 100))) : 0.0;
@@ -109,12 +72,18 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
     String combatClass = ffmi < 19.0 ? "THE GENESIS" : "THE TITAN";
     Color classColor = ffmi < 19.0 ? Colors.white54 : Colors.orangeAccent;
 
-    if (rRatio > 10.4 && ffmi > 21.0) { combatClass = "THE PEAK"; classColor = Colors.cyanAccent; }
-    if (rRatio < 9.6 && ffmi > 22.0) { combatClass = "THE HYBRID"; classColor = Colors.redAccent; }
+    if (rRatio > 10.4 && ffmi > 21.0) {
+      combatClass = "THE PEAK";
+      classColor = Colors.cyanAccent;
+    }
+    if (rRatio < 9.6 && ffmi > 22.0) {
+      combatClass = "THE HYBRID";
+      classColor = Colors.redAccent;
+    }
 
     ExportService.generateAndShareId(
       context: context,
-      bodyData: myBodyData,
+      bodyData: data,
       combatClass: combatClass,
       classColor: classColor,
       ffmi: ffmi,
@@ -125,22 +94,13 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
 
   @override
   Widget build(BuildContext context) {
+    final provider = context.watch<TitanProvider>();
+
     final List<Widget> corePages = [
       const HomePage(),
-      TreePage(
-          plans: myPlans,
-          logs: myLogs,
-          goals: myGoals,
-          library: myLibrary,
-          service: widget.service,
-          onUpdate: _refreshData
-      ),
-      HistoryPage(
-          service: widget.service,
-          plans: myPlans,
-          onUpdate: _refreshData
-      ),
-      _buildHubMenu(),
+      const TreePage(),
+      const HistoryPage(),
+      _buildHubMenu(provider),
     ];
 
     return Scaffold(
@@ -163,7 +123,7 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
     );
   }
 
-  Widget _buildHubMenu() {
+  Widget _buildHubMenu(TitanProvider provider) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 25),
@@ -171,9 +131,10 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SizedBox(height: 80),
-          const Text("TITAN COMMAND", style: TextStyle(fontSize: 42, fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: -2)),
+          const Text("TITAN COMMAND",
+              style: TextStyle(fontSize: 42, fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: -2)),
           const SizedBox(height: 30),
-          _hubActionCard("GENERATE TITAN ID", Icons.fingerprint, Colors.cyanAccent, _generateTitanID),
+          _hubActionCard("GENERATE TITAN ID", Icons.fingerprint, Colors.cyanAccent, () => _generateTitanID(provider)),
           const SizedBox(height: 20),
           Expanded(
             child: GridView.count(
@@ -181,13 +142,13 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
               crossAxisSpacing: 15,
               mainAxisSpacing: 15,
               children: [
-                _hubTile("ANALYTICS", Icons.analytics_outlined, Colors.orangeAccent, () => _open(ProgressPage(logs: myLogs, plans: myPlans))),
-                _hubTile("ROADMAPS", Icons.track_changes_rounded, Colors.blueAccent, () => _open(ExpectedProgressPage(goals: myGoals, plans: myPlans, service: widget.service, onUpdate: _refreshData))),
-                _hubTile("BODY STATS", Icons.person_search_rounded, Colors.greenAccent, () => _open(MeasurementsPage(data: myBodyData, onUpdate: _refreshData))),
-                _hubTile("LIBRARY", Icons.book_rounded, Colors.purpleAccent, () => _open(LibraryPage(library: myLibrary, service: widget.service, onUpdate: _refreshData))),
-                _hubTile("EVOLUTION", Icons.accessibility_new_rounded, Colors.redAccent, () => _open(BodyVisualizerPage(data: myBodyData, logs: myLogs))),
-                _hubTile("RELIC VAULT", Icons.military_tech, Colors.amberAccent, () => _open(RelicVaultPage(logs: myLogs, bodyData: myBodyData, customRelics: myCustomRelics, service: widget.service, onUpdate: _refreshData))),
-                _hubTile("PROTOCOL FORGE", Icons.code_rounded, Colors.cyanAccent, () => _open(ProtocolEditorPage(service: widget.service, onUpdate: _refreshData))),
+                _hubTile("ANALYTICS", Icons.analytics_outlined, Colors.orangeAccent, () => _open(const ProgressPage())),
+                _hubTile("ROADMAPS", Icons.track_changes_rounded, Colors.blueAccent, () => _open(const ExpectedProgressPage())),
+                _hubTile("BODY STATS", Icons.person_search_rounded, Colors.greenAccent, () => _open(const MeasurementsPage())),
+                _hubTile("LIBRARY", Icons.book_rounded, Colors.purpleAccent, () => _open(const LibraryPage())),
+                _hubTile("EVOLUTION", Icons.accessibility_new_rounded, Colors.redAccent, () => _open(const BodyVisualizerPage())),
+                _hubTile("RELIC VAULT", Icons.military_tech, Colors.amberAccent, () => _open(const RelicVaultPage())),
+                _hubTile("PROTOCOL FORGE", Icons.code_rounded, Colors.cyanAccent, () => _open(const ProtocolEditorPage())),
               ],
             ),
           ),
@@ -201,7 +162,11 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.all(22),
-        decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(25), border: Border.all(color: color.withOpacity(0.4))),
+        decoration: BoxDecoration(
+            color: color.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(25),
+            border: Border.all(color: color.withOpacity(0.4))
+        ),
         child: Row(children: [
           Icon(icon, color: color, size: 34),
           const SizedBox(width: 20),
@@ -217,7 +182,11 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        decoration: BoxDecoration(color: const Color(0xFF111111), borderRadius: BorderRadius.circular(25), border: Border.all(color: color.withOpacity(0.2))),
+        decoration: BoxDecoration(
+            color: const Color(0xFF111111),
+            borderRadius: BorderRadius.circular(25),
+            border: Border.all(color: color.withOpacity(0.2))
+        ),
         child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
           Icon(icon, color: color, size: 32),
           const SizedBox(height: 12),
@@ -227,5 +196,5 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
     );
   }
 
-  void _open(Widget page) => Navigator.push(context, MaterialPageRoute(builder: (context) => page)).then((_) => _refreshData());
+  void _open(Widget page) => Navigator.push(context, MaterialPageRoute(builder: (context) => page));
 }

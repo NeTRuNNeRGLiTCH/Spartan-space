@@ -1,40 +1,39 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../models/workout_log.dart';
 import '../models/workout_node.dart';
-import '../services/objectbox_service.dart';
 import '../widgets/history_widgets.dart';
+import '../controllers/history_controller.dart';
+import '../providers/titan_provider.dart';
 
 class HistoryPage extends StatefulWidget {
-  final ObjectBoxService service;
-  final List<WorkoutNode> plans;
-  final VoidCallback onUpdate;
-
-  const HistoryPage({
-    super.key,
-    required this.service,
-    required this.plans,
-    required this.onUpdate
-  });
+  const HistoryPage({super.key});
 
   @override
   _HistoryPageState createState() => _HistoryPageState();
 }
 
 class _HistoryPageState extends State<HistoryPage> {
-  late PageController _pageController;
-
-  static const int calendarOrigin = 10000;
-  int _currentPageIndex = calendarOrigin;
-  String? selectedFolderFilter;
+  late HistoryController _controller;
 
   @override
   void initState() {
     super.initState();
-    _pageController = PageController(initialPage: _currentPageIndex);
+    _controller = HistoryController(
+      provider: context.read<TitanProvider>(),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    context.watch<TitanProvider>();
+
     return Scaffold(
       backgroundColor: const Color(0xFF050505),
       appBar: AppBar(
@@ -46,17 +45,17 @@ class _HistoryPageState extends State<HistoryPage> {
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(60),
           child: HistoryPlanFilter(
-            planTitles: widget.plans.map((p) => p.title).toList(),
-            selectedPlan: selectedFolderFilter,
-            onSelected: (val) => setState(() => selectedFolderFilter = val),
+            planTitles: _controller.planTitles,
+            selectedPlan: _controller.selectedPlanFilter,
+            onSelected: _controller.updatePlanFilter,
           ),
         ),
       ),
       body: PageView.builder(
-        controller: _pageController,
-        onPageChanged: (index) => setState(() => _currentPageIndex = index),
+        controller: _controller.pageController,
+        onPageChanged: _controller.updatePageIndex,
         itemBuilder: (context, index) {
-          DateTime date = DateTime.now().add(Duration(days: index - calendarOrigin));
+          final DateTime date = _controller.getDateFromIndex(index);
           return _buildDailyLogView(date);
         },
       ),
@@ -64,11 +63,8 @@ class _HistoryPageState extends State<HistoryPage> {
   }
 
   Widget _buildDailyLogView(DateTime date) {
-    List<WorkoutLog> dayLogs = widget.service.getLogsForDay(date);
-
-    bool isToday = date.day == DateTime.now().day &&
-        date.month == DateTime.now().month &&
-        date.year == DateTime.now().year;
+    final List<WorkoutLog> dayLogs = _controller.getLogsForDate(date);
+    final bool isToday = _controller.isToday(date);
 
     return Column(
       children: [
@@ -93,7 +89,7 @@ class _HistoryPageState extends State<HistoryPage> {
             padding: const EdgeInsets.symmetric(horizontal: 20),
             itemCount: dayLogs.length,
             itemBuilder: (context, i) {
-              var log = dayLogs[i];
+              final log = dayLogs[i];
               return HistoryLogCard(
                 title: log.exerciseName,
                 onEdit: () => _showEditLogDialog(log),
@@ -117,7 +113,7 @@ class _HistoryPageState extends State<HistoryPage> {
   }
 
   void _showEditLogDialog(WorkoutLog log) {
-    List<WorkoutSet> tempSets = log.performedSets.toList().map((s) =>
+    final List<WorkoutSet> tempSets = log.performedSets.toList().map((s) =>
         WorkoutSet(value: s.value, weight: s.weight, isCompleted: s.isCompleted)).toList();
 
     showDialog(
@@ -174,12 +170,7 @@ class _HistoryPageState extends State<HistoryPage> {
             ),
             TextButton(
               onPressed: () {
-                setState(() {
-                  log.performedSets.clear();
-                  log.performedSets.addAll(tempSets);
-                  widget.service.saveLog(log);
-                });
-                widget.onUpdate();
+                _controller.updateLog(log, tempSets);
                 Navigator.pop(ctx);
               },
               child: const Text("UPDATE", style: TextStyle(color: Colors.orangeAccent, fontWeight: FontWeight.bold)),
@@ -202,10 +193,7 @@ class _HistoryPageState extends State<HistoryPage> {
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("CANCEL", style: TextStyle(color: Colors.white54))),
           TextButton(
             onPressed: () {
-              setState(() {
-                widget.service.deleteLog(logToDelete.id);
-              });
-              widget.onUpdate();
+              _controller.deleteLog(logToDelete.id);
               Navigator.pop(ctx);
             },
             child: const Text("DELETE", style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),

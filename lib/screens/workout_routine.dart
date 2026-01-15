@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../models/workout_node.dart';
-import '../models/workout_log.dart';
 import '../models/goal_node.dart';
 import '../models/custom_protocol.dart';
-import '../services/objectbox_service.dart';
+import '../providers/titan_provider.dart';
+import '../controllers/workout_routine_controller.dart';
 import '../widgets/workout_widgets.dart';
 import 'session_complete_page.dart';
 
@@ -11,18 +12,12 @@ class WorkoutRoutine extends StatefulWidget {
   final WorkoutNode plan;
   final GoalNode? roadmap;
   final WorkoutNode? selectedDay;
-  final List<WorkoutLog> logs;
-  final ObjectBoxService service;
-  final VoidCallback onUpdate;
 
   const WorkoutRoutine({
     super.key,
     required this.plan,
     this.roadmap,
     this.selectedDay,
-    required this.logs,
-    required this.service,
-    required this.onUpdate,
   });
 
   @override
@@ -30,32 +25,16 @@ class WorkoutRoutine extends StatefulWidget {
 }
 
 class _WorkoutRoutineState extends State<WorkoutRoutine> {
-  List<WorkoutNode> exercises = [];
-  final TextEditingController _objectiveController = TextEditingController();
+  late WorkoutRoutineController _controller;
 
   @override
   void initState() {
     super.initState();
-    _initializeSession();
-  }
-
-  void _initializeSession() {
-    exercises.clear();
-    if (widget.selectedDay != null) {
-      _flatten(widget.selectedDay!, exercises);
-    } else {
-      _flatten(widget.plan, exercises);
-    }
-  }
-
-  void _flatten(WorkoutNode node, List<WorkoutNode> list) {
-    if (node.type == NodeType.leaf) {
-      list.add(node);
-    } else {
-      for (var child in node.children.toList()) {
-        _flatten(child, list);
-      }
-    }
+    _controller = WorkoutRoutineController(
+      provider: context.read<TitanProvider>(),
+      plan: widget.plan,
+      selectedDay: widget.selectedDay,
+    );
   }
 
   void _initializeProtocol() {
@@ -64,10 +43,8 @@ class _WorkoutRoutineState extends State<WorkoutRoutine> {
       MaterialPageRoute(
         builder: (context) => SessionCompletePage(
           title: widget.selectedDay?.title ?? widget.plan.title,
-          dailyObjective: _objectiveController.text,
-          exercises: exercises,
-          service: widget.service,
-          onUpdate: widget.onUpdate,
+          dailyObjective: _controller.objectiveController.text,
+          exercises: _controller.exercises,
           roadmap: widget.roadmap,
           rootSetRest: widget.plan.restTime ?? 90,
           rootInterRest: widget.plan.interExerciseRest,
@@ -78,6 +55,8 @@ class _WorkoutRoutineState extends State<WorkoutRoutine> {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<TitanProvider>();
+
     return Scaffold(
       backgroundColor: const Color(0xFF050505),
       body: Column(
@@ -99,7 +78,7 @@ class _WorkoutRoutineState extends State<WorkoutRoutine> {
                       style: TextStyle(color: Colors.orangeAccent, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 2)),
                   const SizedBox(height: 8),
                   TextField(
-                    controller: _objectiveController,
+                    controller: _controller.objectiveController,
                     style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
                     decoration: const InputDecoration(
                       hintText: "DEFINE PRIMARY GOAL...",
@@ -114,13 +93,10 @@ class _WorkoutRoutineState extends State<WorkoutRoutine> {
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.symmetric(horizontal: 20),
-              itemCount: exercises.length,
+              itemCount: _controller.exercises.length,
               itemBuilder: (context, index) {
-                var ex = exercises[index];
-
-                String unit = "R";
-                if (ex.trackingType == TrackingType.time) unit = "SEC";
-                if (ex.trackingType == TrackingType.distance) unit = "METERS";
+                var ex = _controller.exercises[index];
+                String unit = ex.trackingType == TrackingType.time ? "SEC" : (ex.trackingType == TrackingType.distance ? "METERS" : "R");
 
                 return RoutineExerciseCard(
                   title: ex.title,
@@ -136,12 +112,10 @@ class _WorkoutRoutineState extends State<WorkoutRoutine> {
                           const SizedBox(width: 15),
                           const Text("TARGET", style: TextStyle(color: Colors.white38, fontSize: 8, fontWeight: FontWeight.w900)),
                           const Spacer(),
-                          _inlineEdit("${entry.value.value}", unit,
-                                  (v) => setState(() => entry.value.value = int.tryParse(v) ?? 0)),
+                          _inlineEdit("${entry.value.value}", unit, (v) => setState(() => _controller.updateSetTarget(entry.value, v, false))),
                           const SizedBox(width: 10),
                           if (ex.trackingType == TrackingType.weightReps)
-                            _inlineEdit("${entry.value.weight}", "KG",
-                                    (v) => setState(() => entry.value.weight = double.tryParse(v) ?? 0)),
+                            _inlineEdit("${entry.value.weight}", "KG", (v) => setState(() => _controller.updateSetTarget(entry.value, v, true))),
                         ],
                       ),
                     );
@@ -199,7 +173,7 @@ class _WorkoutRoutineState extends State<WorkoutRoutine> {
   }
 
   void _showProtocolManager(WorkoutNode ex) {
-    List<CustomProtocol> available = widget.service.getAllProtocols();
+    List<CustomProtocol> available = _controller.provider.service.getAllProtocols();
     CustomProtocol? current = ex.protocol.target;
 
     showModalBottomSheet(
@@ -215,38 +189,27 @@ class _WorkoutRoutineState extends State<WorkoutRoutine> {
               const Text("AUTOMATION STACK", style: TextStyle(color: Colors.orangeAccent, fontWeight: FontWeight.bold)),
               const SizedBox(height: 20),
               DropdownButton<CustomProtocol>(
-                value: available.any((p) => p.id == current?.id)
-                    ? available.firstWhere((p) => p.id == current?.id)
-                    : null,
+                value: available.any((p) => p.id == current?.id) ? available.firstWhere((p) => p.id == current?.id) : null,
                 isExpanded: true,
                 hint: const Text("Select TitanScript", style: TextStyle(color: Colors.white24)),
                 dropdownColor: const Color(0xFF0A0A0A),
-                items: available.map((p) => DropdownMenuItem(
-                    value: p,
-                    child: Text(p.title, style: const TextStyle(color: Colors.cyanAccent, fontSize: 13))
-                )).toList(),
-                onChanged: (val) {
-                  setSheetState(() => current = val);
-                },
+                items: available.map((p) => DropdownMenuItem(value: p, child: Text(p.title, style: const TextStyle(color: Colors.cyanAccent, fontSize: 13)))).toList(),
+                onChanged: (val) => setSheetState(() => current = val),
               ),
               const SizedBox(height: 30),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.orangeAccent, minimumSize: const Size(double.infinity, 50)),
                 onPressed: () {
-                  ex.protocol.target = current;
-                  widget.service.savePlan(ex);
+                  _controller.attachProtocol(ex, current);
                   Navigator.pop(ctx);
-                  setState(() {});
                 },
                 child: const Text("ATTACH SCRIPT", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
               ),
               const SizedBox(height: 10),
               TextButton(
                 onPressed: () {
-                  ex.protocol.target = null;
-                  widget.service.savePlan(ex);
+                  _controller.clearProtocol(ex);
                   Navigator.pop(ctx);
-                  setState(() {});
                 },
                 child: const Text("CLEAR LOGIC", style: TextStyle(color: Colors.redAccent, fontSize: 10)),
               )

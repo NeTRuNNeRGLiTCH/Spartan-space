@@ -1,6 +1,8 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../widgets/home_widgets.dart';
+import '../providers/titan_provider.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -74,6 +76,8 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    final provider = context.watch<TitanProvider>();
+
     return Scaffold(
       backgroundColor: const Color(0xFF050505),
       body: Stack(
@@ -95,7 +99,13 @@ class _HomePageState extends State<HomePage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const SizedBox(height: 40),
-                  const HomeHeader(),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const HomeHeader(),
+                      _buildSyncButton(provider),
+                    ],
+                  ),
                   const Spacer(),
                   HomeQuoteCard(quote: currentQuote),
                   const Spacer(),
@@ -106,6 +116,27 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildSyncButton(TitanProvider provider) {
+    bool isActive = provider.isArchiveActive;
+    return GestureDetector(
+      onTap: () => provider.syncFullArchive(),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: isActive ? Colors.cyanAccent.withOpacity(0.1) : Colors.white.withOpacity(0.05),
+          shape: BoxShape.circle,
+          border: Border.all(color: isActive ? Colors.cyanAccent : Colors.white10),
+        ),
+        child: Icon(
+          provider.isSyncing ? Icons.sync : Icons.bolt,
+          size: 20,
+          color: isActive ? Colors.cyanAccent : Colors.white24,
+        ),
       ),
     );
   }

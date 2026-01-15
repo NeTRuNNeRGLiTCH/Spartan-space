@@ -1,40 +1,30 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../models/workout_node.dart';
-import '../services/objectbox_service.dart';
 import '../widgets/library_widgets.dart';
+import '../providers/titan_provider.dart';
+import '../controllers/library_controller.dart';
 
 class LibraryPage extends StatefulWidget {
-  final Map<String, List<LibraryExercise>> library;
-  final ObjectBoxService service;
-  final VoidCallback onUpdate;
-
-  const LibraryPage({
-    super.key,
-    required this.library,
-    required this.service,
-    required this.onUpdate
-  });
+  const LibraryPage({super.key});
 
   @override
   State<LibraryPage> createState() => _LibraryPageState();
 }
 
 class _LibraryPageState extends State<LibraryPage> {
+  late LibraryController _controller;
 
-  void _handleDelete(LibraryExercise ex, String muscle) {
-    setState(() {
-      widget.library[muscle]?.remove(ex);
-
-      if (ex.id != 0) {
-        widget.service.deleteLibraryExercise(ex.id);
-      }
-    });
-
-    widget.onUpdate();
+  @override
+  void initState() {
+    super.initState();
+    _controller = LibraryController(
+      provider: context.read<TitanProvider>(),
+    );
   }
 
   void _addNewExercise(String muscle) {
-    TextEditingController nameCtrl = TextEditingController();
+    final nameCtrl = TextEditingController();
     TrackingType selectedType = TrackingType.weightReps;
 
     showDialog(
@@ -82,7 +72,7 @@ class _LibraryPageState extends State<LibraryPage> {
                         return DropdownMenuItem(
                           value: type,
                           child: Text(
-                            _getTrackingLabel(type),
+                            _controller.getTrackingLabel(type),
                             style: const TextStyle(color: Colors.white, fontSize: 13),
                           ),
                         );
@@ -105,20 +95,7 @@ class _LibraryPageState extends State<LibraryPage> {
               style: ElevatedButton.styleFrom(backgroundColor: Colors.orangeAccent),
               onPressed: () {
                 if (nameCtrl.text.isNotEmpty) {
-                  final newEx = LibraryExercise(
-                    name: nameCtrl.text,
-                    trackingIndex: selectedType.index,
-                    muscleGroup: muscle,
-                  );
-
-                  widget.service.saveLibraryExercise(newEx);
-
-                  setState(() {
-                    widget.library[muscle]?.add(newEx);
-                  });
-
-                  widget.onUpdate();
-
+                  _controller.addExercise(nameCtrl.text, selectedType, muscle);
                   Navigator.pop(ctx);
                 }
               },
@@ -130,17 +107,10 @@ class _LibraryPageState extends State<LibraryPage> {
     );
   }
 
-  String _getTrackingLabel(TrackingType type) {
-    switch (type) {
-      case TrackingType.weightReps: return "WEIGHT + REPS (Standard)";
-      case TrackingType.repsOnly: return "REPS ONLY (Calisthenics)";
-      case TrackingType.time: return "TIME (Plank/Holds)";
-      case TrackingType.distance: return "DISTANCE (Cardio)";
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
+    final library = context.watch<TitanProvider>().library;
+
     return Scaffold(
       backgroundColor: const Color(0xFF050505),
       appBar: AppBar(
@@ -153,11 +123,11 @@ class _LibraryPageState extends State<LibraryPage> {
       ),
       body: ListView(
         padding: const EdgeInsets.all(20),
-        children: widget.library.keys.map((muscle) => LibraryMuscleCard(
+        children: library.keys.map((muscle) => LibraryMuscleCard(
           muscle: muscle,
-          exercises: widget.library[muscle]!,
+          exercises: library[muscle]!,
           onAdd: () => _addNewExercise(muscle),
-          onDelete: (exObject) => _handleDelete(exObject, muscle),
+          onDelete: (exObject) => _controller.deleteExercise(exObject, muscle),
         )).toList(),
       ),
     );

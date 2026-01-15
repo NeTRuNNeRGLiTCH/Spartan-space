@@ -1,5 +1,5 @@
 name: gym
-description: "A new Flutter project."
+description: "Titan Log Pro - Biological Evolution Interface"
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+1
+version: 2.1.0
 
 environment:
   sdk: ^3.7.2
@@ -30,10 +30,13 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  # Data Persistence
   objectbox: ^4.0.0
   objectbox_flutter_libs: ^4.0.0
   path_provider: ^2.1.0
-  # Keep your other tools
+  # State Management (New)
+  provider: ^6.1.1
+  # UI & Analytics
   fl_chart: ^0.70.2
   flutter_heatmap_calendar: ^1.0.5
   o3d: ^3.0.0
