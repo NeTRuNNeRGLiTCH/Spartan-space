@@ -64,4 +64,5 @@ WHEN Reps of all >= 12 DO
 OTHERWISE
   REPEAT 2 DO
     Weight of set(this) + 1.25 .
+.
 END .
